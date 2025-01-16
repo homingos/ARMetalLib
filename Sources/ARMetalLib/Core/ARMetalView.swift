@@ -246,50 +246,59 @@ public class ARMetalView: MTKView {
     private func createMaskRenderPipeline() {
         guard let device = self.device else { return }
         
-        guard let library = device.makeDefaultLibrary(),
-              let vertexFunction = library.makeFunction(name: "maskVertexShader"),
-              let fragmentFunction = library.makeFunction(name: "maskFragmentShader") else {
-            print("Failed to create mask shader functions")
-            return
-        }
-        
-        let pipelineDescriptor = MTLRenderPipelineDescriptor()
-        pipelineDescriptor.label = "Mask Render Pipeline"
-        pipelineDescriptor.vertexFunction = vertexFunction
-        pipelineDescriptor.fragmentFunction = fragmentFunction
-        
-        // Configure color attachment for mask pass
-        let colorAttachment = pipelineDescriptor.colorAttachments[0]
-        colorAttachment?.pixelFormat = self.colorPixelFormat
-        colorAttachment?.isBlendingEnabled = false
-        colorAttachment?.writeMask = [] // Don't write to color buffer
-        
-        pipelineDescriptor.depthAttachmentPixelFormat = .depth32Float_stencil8
-        pipelineDescriptor.stencilAttachmentPixelFormat = .depth32Float_stencil8
-        
-        // Add vertex descriptor for mask pipeline
-        let vertexDescriptor = MTLVertexDescriptor()
-        vertexDescriptor.attributes[0].format = .float3
-        vertexDescriptor.attributes[0].offset = 0
-        vertexDescriptor.attributes[0].bufferIndex = 0
-        
-        vertexDescriptor.attributes[1].format = .float2
-        vertexDescriptor.attributes[1].offset = MemoryLayout<SIMD3<Float>>.stride
-        vertexDescriptor.attributes[1].bufferIndex = 0
-        
-        vertexDescriptor.attributes[2].format = .uint
-        vertexDescriptor.attributes[2].offset = MemoryLayout<SIMD3<Float>>.stride + MemoryLayout<SIMD2<Float>>.stride
-        vertexDescriptor.attributes[2].bufferIndex = 0
-        
-        vertexDescriptor.layouts[0].stride = MemoryLayout<Vertex>.stride
-        
-        pipelineDescriptor.vertexDescriptor = vertexDescriptor
-        
+        let url = Bundle.module.url(forResource: "ARMetalShaders", withExtension: "metal", subdirectory: "Shaders")!
         do {
-            maskRenderPipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+            let source = try String(contentsOf: url)
+
+            let library = try device.makeLibrary(source: source, options: nil)
+            
+            guard let vertexFunction = library.makeFunction(name: "maskVertexShader"),
+                  let fragmentFunction = library.makeFunction(name: "maskFragmentShader") else {
+                print("Failed to create mask shader functions")
+                return
+            }
+            
+            let pipelineDescriptor = MTLRenderPipelineDescriptor()
+            pipelineDescriptor.label = "Mask Render Pipeline"
+            pipelineDescriptor.vertexFunction = vertexFunction
+            pipelineDescriptor.fragmentFunction = fragmentFunction
+            
+            // Configure color attachment for mask pass
+            let colorAttachment = pipelineDescriptor.colorAttachments[0]
+            colorAttachment?.pixelFormat = self.colorPixelFormat
+            colorAttachment?.isBlendingEnabled = false
+            colorAttachment?.writeMask = [] // Don't write to color buffer
+            
+            pipelineDescriptor.depthAttachmentPixelFormat = .depth32Float_stencil8
+            pipelineDescriptor.stencilAttachmentPixelFormat = .depth32Float_stencil8
+            
+            // Add vertex descriptor for mask pipeline
+            let vertexDescriptor = MTLVertexDescriptor()
+            vertexDescriptor.attributes[0].format = .float3
+            vertexDescriptor.attributes[0].offset = 0
+            vertexDescriptor.attributes[0].bufferIndex = 0
+            
+            vertexDescriptor.attributes[1].format = .float2
+            vertexDescriptor.attributes[1].offset = MemoryLayout<SIMD3<Float>>.stride
+            vertexDescriptor.attributes[1].bufferIndex = 0
+            
+            vertexDescriptor.attributes[2].format = .uint
+            vertexDescriptor.attributes[2].offset = MemoryLayout<SIMD3<Float>>.stride + MemoryLayout<SIMD2<Float>>.stride
+            vertexDescriptor.attributes[2].bufferIndex = 0
+            
+            vertexDescriptor.layouts[0].stride = MemoryLayout<Vertex>.stride
+            
+            pipelineDescriptor.vertexDescriptor = vertexDescriptor
+            
+            do {
+                maskRenderPipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+            } catch {
+                print("Failed to create mask pipeline state: \(error)")
+            }
         } catch {
-            print("Failed to create mask pipeline state: \(error)")
+            print("ERROR : !!!")
         }
+        
     }
     
     

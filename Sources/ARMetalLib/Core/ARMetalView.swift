@@ -74,6 +74,7 @@ public class ARMetalView: MTKView {
         self.viewControllerDelegate = controller
     }
     
+    /// Updated the Extent of the rendering Plane
     public func setTargetSize(targetSize: CGSize){
         targetExtent = targetSize
         updateVertexBuffer(newExtent: targetSize)

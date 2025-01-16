@@ -11,6 +11,7 @@ import UIKit
 public enum ParallaxType: Sendable {
     case Image
     case Video
+    case Model3D
 }
 
 /// class for holding Parallax Layer images data

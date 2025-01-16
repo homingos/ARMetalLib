@@ -17,7 +17,7 @@ let package = Package(
         .target(
             name: "ARMetalLib",
             resources: [
-                .process("Shaders")  // Change to include the whole Shaders directory
+                .process("Shaders/ARMetalShader.metal")  // Change to include the whole Shaders directory
             ]
         )
     ]

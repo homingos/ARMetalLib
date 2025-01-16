@@ -433,7 +433,7 @@ public class ARMetalView: MTKView {
     // Function to update transforms
     //TODO: no need to update the projectMatrix every frame
     /// Preventing calling this function if not need to update the MetalView
-    func updateTransforms(
+    public func updateTransforms(
         anchorTransform: simd_float4x4,
         cameraTransform: simd_float4x4?,
         projectionMatrix: simd_float4x4

@@ -41,7 +41,7 @@ public class ARMetalView: MTKView {
     
     private var isBufferUpdated: Bool = false
     
-    init?(frame: CGRect, device: MTLDevice, viewControllerDelegate: ARMetalViewDelegate) {
+    public init?(frame: CGRect, device: MTLDevice, viewControllerDelegate: ARMetalViewDelegate) {
         print("init ARMetalView")
         super.init(frame: frame, device: device)
         self.device = device
@@ -74,7 +74,7 @@ public class ARMetalView: MTKView {
         self.viewControllerDelegate = controller
     }
     
-    func setTargetSize(targetSize: CGSize){
+    public func setTargetSize(targetSize: CGSize){
         targetExtent = targetSize
         updateVertexBuffer(newExtent: targetSize)
         updateMaskVertices(maskVertexBuffer)

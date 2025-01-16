@@ -64,6 +64,7 @@ public class ARMetalView: MTKView {
         fatalError("init(coder:) has not been implemented")
     }
     
+    /// Use for updating and setting the LayerImage
     public func updateLayerImage(layerImage: [String: LayerImage]){
         self.layerImageDic = layerImage
         print("Recieved layerImage: \(layerImage)")
@@ -444,7 +445,7 @@ public class ARMetalView: MTKView {
     
     // Function to update transforms
     //TODO: no need to update the projectMatrix every frame
-    /// Preventing calling this function if not need to update the MetalView
+    /// Preventing calling this function if it is not need to update the MetalView
     public func updateTransforms(
         anchorTransform: simd_float4x4,
         cameraTransform: simd_float4x4?,

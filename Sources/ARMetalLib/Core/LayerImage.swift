@@ -24,7 +24,7 @@ public final class LayerImage: @unchecked Sendable {
     let type: ParallaxType
     
     // Initializer
-    init(id: Int, offset: SIMD3<Float>, image: UIImage?, texture: MTLTexture? = nil, scale: Float = 1.0, type: ParallaxType = .Image) {
+    public init(id: Int, offset: SIMD3<Float>, image: UIImage?, texture: MTLTexture? = nil, scale: Float = 1.0, type: ParallaxType = .Image) {
         self.id = id
         self.offset = offset
         self.image = image

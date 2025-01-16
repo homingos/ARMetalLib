@@ -18,7 +18,7 @@ let package = Package(
             name: "ARMetalLib",
             path: "Sources/ARMetalLib",
             resources: [
-                .process("Shader.metal")
+                .process("Shaders/ARMetalShader.metal")
             ]
         )
     ]

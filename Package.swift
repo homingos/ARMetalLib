@@ -22,26 +22,3 @@ let package = Package(
         )
     ]
 )
-
-//// swift-tools-version:5.5
-//import PackageDescription
-//
-//let package = Package(
-//    name: "ARMetalSDK",
-//    platforms: [
-//        .iOS(.v13)
-//    ],
-//    products: [
-//        .library(
-//            name: "ARMetalSDK",
-//            targets: ["ARMetalSDK"]),
-//    ],
-//    targets: [
-//        .target(
-//            name: "ARMetalSDK",
-//            resources: [
-//                .process("Shaders/Shaders.metal")
-//            ]
-//        )
-//    ]
-//)

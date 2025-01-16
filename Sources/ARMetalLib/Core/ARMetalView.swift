@@ -9,12 +9,12 @@
 import Foundation
 import MetalKit
 
-protocol ARMetalViewDelegate: AnyObject {
+public protocol ARMetalViewDelegate: AnyObject {
     /// Use this for any animation for every draw call
     func willUpdateDraw(layerImages: [LayerImage]) ->[SIMD3<Float>]?
 }
 
-class ARMetalView: MTKView {
+public class ARMetalView: MTKView {
     private var commandQueue: MTLCommandQueue!
     private var renderPipelineState: MTLRenderPipelineState!
     private var vertexBuffers: [MTLBuffer] = []
@@ -449,7 +449,7 @@ class ARMetalView: MTKView {
 //        }
     }
     
-    override func draw(_ rect: CGRect) {
+    public override func draw(_ rect: CGRect) {
         
         guard let uniformBuffer = uniformBuffer,
               let maskVertexBuffer,

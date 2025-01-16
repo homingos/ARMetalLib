@@ -8,14 +8,14 @@
 import Metal
 import UIKit
 
-enum ParallaxType: Sendable {
+public enum ParallaxType: Sendable {
     case Image
     case Video
 }
 
 /// class for holding Parallax Layer images data
 /// Used in Metal AR
-final class LayerImage: @unchecked Sendable {
+public final class LayerImage: @unchecked Sendable {
     let id: Int
     let offset: SIMD3<Float>
     let image: UIImage?

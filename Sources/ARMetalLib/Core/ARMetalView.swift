@@ -302,54 +302,59 @@ public class ARMetalView: MTKView {
     private func createRenderPipeline() {
         guard let device = self.device else { return }
         
-        guard let library = device.makeDefaultLibrary(),
-              let vertexFunction = library.makeFunction(name: "vertexShader"),
-              let fragmentFunction = library.makeFunction(name: "fragmentShader") else {
-            print("Failed to create shader functions")
-            return
-        }
-        
-        let pipelineDescriptor = MTLRenderPipelineDescriptor()
-        pipelineDescriptor.label = "Render Pipeline"
-        pipelineDescriptor.vertexFunction = vertexFunction
-        pipelineDescriptor.fragmentFunction = fragmentFunction
-        pipelineDescriptor.colorAttachments[0].pixelFormat = self.colorPixelFormat
-        pipelineDescriptor.depthAttachmentPixelFormat = .depth32Float_stencil8
-        pipelineDescriptor.stencilAttachmentPixelFormat = .depth32Float_stencil8
-        
-        // Configure blending
-        let attachment = pipelineDescriptor.colorAttachments[0]
-        attachment?.isBlendingEnabled = true
-        attachment?.rgbBlendOperation = .add
-        attachment?.alphaBlendOperation = .add
-        attachment?.sourceRGBBlendFactor = .sourceAlpha
-        attachment?.sourceAlphaBlendFactor = .one
-        attachment?.destinationRGBBlendFactor = .oneMinusSourceAlpha
-        attachment?.destinationAlphaBlendFactor = .oneMinusSourceAlpha
-        
-        // Configure vertex descriptor with texture index
-        let vertexDescriptor = MTLVertexDescriptor()
-        vertexDescriptor.attributes[0].format = .float3
-        vertexDescriptor.attributes[0].offset = 0
-        vertexDescriptor.attributes[0].bufferIndex = 0
-        
-        vertexDescriptor.attributes[1].format = .float2
-        vertexDescriptor.attributes[1].offset = MemoryLayout<SIMD3<Float>>.stride
-        vertexDescriptor.attributes[1].bufferIndex = 0
-        
-        vertexDescriptor.attributes[2].format = .uint
-        vertexDescriptor.attributes[2].offset = MemoryLayout<SIMD3<Float>>.stride + MemoryLayout<SIMD2<Float>>.stride
-        vertexDescriptor.attributes[2].bufferIndex = 0
-        
-        vertexDescriptor.layouts[0].stride = MemoryLayout<Vertex>.stride
-        
-        pipelineDescriptor.vertexDescriptor = vertexDescriptor
-        
         do {
-            renderPipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+            let library = try device.makeDefaultLibrary(bundle: Bundle.module)
+            guard let vertexFunction = library.makeFunction(name: "vertexShader"),
+                  let fragmentFunction = library.makeFunction(name: "fragmentShader") else {
+                print("Failed to create shader functions")
+                return
+            }
+            
+            let pipelineDescriptor = MTLRenderPipelineDescriptor()
+            pipelineDescriptor.label = "Render Pipeline"
+            pipelineDescriptor.vertexFunction = vertexFunction
+            pipelineDescriptor.fragmentFunction = fragmentFunction
+            pipelineDescriptor.colorAttachments[0].pixelFormat = self.colorPixelFormat
+            pipelineDescriptor.depthAttachmentPixelFormat = .depth32Float_stencil8
+            pipelineDescriptor.stencilAttachmentPixelFormat = .depth32Float_stencil8
+            
+            // Configure blending
+            let attachment = pipelineDescriptor.colorAttachments[0]
+            attachment?.isBlendingEnabled = true
+            attachment?.rgbBlendOperation = .add
+            attachment?.alphaBlendOperation = .add
+            attachment?.sourceRGBBlendFactor = .sourceAlpha
+            attachment?.sourceAlphaBlendFactor = .one
+            attachment?.destinationRGBBlendFactor = .oneMinusSourceAlpha
+            attachment?.destinationAlphaBlendFactor = .oneMinusSourceAlpha
+            
+            // Configure vertex descriptor with texture index
+            let vertexDescriptor = MTLVertexDescriptor()
+            vertexDescriptor.attributes[0].format = .float3
+            vertexDescriptor.attributes[0].offset = 0
+            vertexDescriptor.attributes[0].bufferIndex = 0
+            
+            vertexDescriptor.attributes[1].format = .float2
+            vertexDescriptor.attributes[1].offset = MemoryLayout<SIMD3<Float>>.stride
+            vertexDescriptor.attributes[1].bufferIndex = 0
+            
+            vertexDescriptor.attributes[2].format = .uint
+            vertexDescriptor.attributes[2].offset = MemoryLayout<SIMD3<Float>>.stride + MemoryLayout<SIMD2<Float>>.stride
+            vertexDescriptor.attributes[2].bufferIndex = 0
+            
+            vertexDescriptor.layouts[0].stride = MemoryLayout<Vertex>.stride
+            
+            pipelineDescriptor.vertexDescriptor = vertexDescriptor
+            
+            do {
+                renderPipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+            } catch {
+                print("Failed to create pipeline state: \(error)")
+            }
         } catch {
-            print("Failed to create pipeline state: \(error)")
+            print("ERROR: !!!")
         }
+        
     }
     
     /// Initlize the vertex buffer and index buffer according to LayerImages
@@ -451,8 +456,8 @@ public class ARMetalView: MTKView {
             setNeedsDisplay()
         }
         //else {
-//            print("cannot setNeedsDisplay: \(layerImages.count) + \(vertexBuffers.count)")
-//        }
+        //            print("cannot setNeedsDisplay: \(layerImages.count) + \(vertexBuffers.count)")
+        //        }
     }
     
     public override func draw(_ rect: CGRect) {
@@ -482,7 +487,7 @@ public class ARMetalView: MTKView {
         maskEncoder.setRenderPipelineState(maskRenderPipelineState)
         maskEncoder.setDepthStencilState(writeStencilState)
         maskEncoder.setStencilReferenceValue(1)
-//        print("drawing")
+        //        print("drawing")
         // Render mask geometry
         // TODO: Create the buffer only once not every frame
         maskEncoder.setVertexBuffer(maskVertexBuffer, offset: 0, index: 0)

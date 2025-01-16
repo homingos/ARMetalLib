@@ -5,8 +5,10 @@
 //  Created by Vishwas Prakash on 16/01/25.
 //
 
-#ifndef Header_h
-#define Header_h
+#import <Foundation/Foundation.h>
 
+//! Project version number for ARMetalSDK.
+FOUNDATION_EXPORT double ARMetalSDKVersionNumber;
 
-#endif /* Header_h */
+//! Project version string for ARMetalSDK.
+FOUNDATION_EXPORT const unsigned char ARMetalSDKVersionString[];

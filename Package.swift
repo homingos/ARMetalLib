@@ -16,9 +16,8 @@ let package = Package(
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
             name: "ARMetalLib",
-            path: "Sources/ARMetalLib",
             resources: [
-                .process("Shaders/ARMetalShader.metal")
+                .process("Shaders")  // Change to include the whole Shaders directory
             ]
         )
     ]

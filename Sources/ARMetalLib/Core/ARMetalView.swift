@@ -246,7 +246,7 @@ public class ARMetalView: MTKView {
     private func createMaskRenderPipeline() {
         guard let device = self.device else { return }
         
-        let url = Bundle.module.url(forResource: "ARMetalShader", withExtension: "metal")!
+        let url = Bundle.module.url(forResource: "ARMetalShader", withExtension: "metal", subdirectory: "Shaders")!
         do {
             let library = try device.makeLibrary(URL: url)
             

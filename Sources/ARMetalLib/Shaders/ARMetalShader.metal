@@ -20,7 +20,7 @@ struct VertexOut {
     uint textureIndex;
 };
 
-// Mask vertex shader
+// Mask vertex shader - now includes texture coordinates for mask image
 vertex VertexOut maskVertexShader(VertexIn in [[stage_in]], constant float4x4 *matrices [[buffer(1)]]) {
     VertexOut out;
     
@@ -29,11 +29,30 @@ vertex VertexOut maskVertexShader(VertexIn in [[stage_in]], constant float4x4 *m
     float4x4 projectionMatrix = matrices[2];
     float4x4 modelViewMatrix = viewMatrix * modelMatrix;
     
-    out.position = projectionMatrix * modelViewMatrix * float4(in.position, 1.0);  // Use NDC coordinates directly for mask
+    out.position = projectionMatrix * modelViewMatrix * float4(in.position, 1.0);
     out.texCoord = in.texCoord;
     out.textureIndex = in.textureIndex;
     
     return out;
+}
+
+// Modified mask fragment shader to use mask texture
+fragment float4 maskImageFragmentShader(VertexOut in [[stage_in]],
+                                 texture2d<float> maskTexture [[texture(8)]],
+                                 sampler textureSampler [[sampler(0)]]) {
+    // Sample the mask texture
+    float4 maskColor = maskTexture.sample(textureSampler, in.texCoord);
+    
+    // Use the red channel threshold to determine stencil writing
+    // Pixels where the mask is lighter than 0.5 will be written to stencil
+    bool shouldWrite = maskColor.r > 0.5;
+    
+    // Discard fragment if it shouldn't be written to stencil
+    if (!shouldWrite) {
+        discard_fragment();
+    }
+    
+    return float4(0.0, 0.0, 0.0, maskColor.r);  // Color doesn't matter as we're only writing to stencil
 }
 
 // Mask fragment shader - writes to stencil buffer
@@ -66,4 +85,37 @@ fragment float4 fragmentShader(VertexOut in [[stage_in]],
     float4 color = textures[in.textureIndex].sample(textureSampler, in.texCoord);
     
     return color;
+}
+
+// Main vertex shader with mask
+vertex VertexOut vertexShaderWithMask(VertexIn in [[stage_in]],
+                                    constant float4x4 *matrices [[buffer(1)]]) {
+    VertexOut out;
+    
+    float4x4 modelMatrix = matrices[0];
+    float4x4 viewMatrix = matrices[1];
+    float4x4 projectionMatrix = matrices[2];
+    float4x4 modelViewMatrix = viewMatrix * modelMatrix;
+    
+    out.position = projectionMatrix * modelViewMatrix * float4(in.position, 1.0);
+    out.texCoord = in.texCoord;
+    out.textureIndex = in.textureIndex;
+    
+    return out;
+}
+
+// Fragment shader with mask texture
+fragment float4 fragmentShaderWithMask(VertexOut in [[stage_in]],
+                                     array<texture2d<float>, 8> textures [[texture(0)]],
+                                     texture2d<float> maskTexture [[texture(8)]],
+                                     sampler textureSampler [[sampler(0)]]) {
+    // Sample from the content texture
+    float4 color = textures[in.textureIndex].sample(textureSampler, in.texCoord);
+    
+    // Sample from the mask texture (using same UV coordinates)
+    float4 mask = maskTexture.sample(textureSampler, in.texCoord);
+    
+    // Use the mask's red channel as the alpha mask (assuming grayscale mask)
+    // White (1.0) in mask = fully visible, Black (0.0) = fully transparent
+    return float4(color.rgb, color.a * mask.r);
 }

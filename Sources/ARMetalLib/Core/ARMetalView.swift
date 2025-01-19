@@ -14,6 +14,22 @@ public protocol ARMetalViewDelegate: AnyObject {
     func willUpdateDraw(layerImages: [LayerImage]) ->[SIMD3<Float>]?
 }
 
+enum MaskType{
+    case none
+    case Image
+}
+public enum MaskMode{
+    case none
+    case Image(UIImage)
+    
+    var contentType: MaskType {
+        switch self {
+        case .none: return .none
+        case .Image: return .Image
+        }
+    }
+}
+
 public class ARMetalView: MTKView {
     private var commandQueue: MTLCommandQueue!
     private var renderPipelineState: MTLRenderPipelineState!
@@ -40,8 +56,10 @@ public class ARMetalView: MTKView {
     private var targetExtent: CGSize?
     
     private var isBufferUpdated: Bool = false
+    private var maskMode: MaskMode = .none
+    private var maskTexture: MTLTexture?
     
-    public init?(frame: CGRect, device: MTLDevice, viewControllerDelegate: ARMetalViewDelegate) {
+    public init?(frame: CGRect, device: MTLDevice, viewControllerDelegate: ARMetalViewDelegate, maskMode: MaskMode) {
         print("init ARMetalView")
         super.init(frame: frame, device: device)
         self.device = device
@@ -53,6 +71,7 @@ public class ARMetalView: MTKView {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.framebufferOnly = false
+        self.maskMode = maskMode
         // true if you want to update the draw call manually using setNeedsDisplay()
         self.enableSetNeedsDisplay = true
         
@@ -251,11 +270,17 @@ public class ARMetalView: MTKView {
         do {
             let library = try device.makeDefaultLibrary(bundle: Bundle.module)
             
-            guard let vertexFunction = library.makeFunction(name: "maskVertexShader"),
-                  let fragmentFunction = library.makeFunction(name: "maskFragmentShader") else {
-                print("Failed to create mask shader functions")
-                return
+            guard let vertexFunction = library.makeFunction(name: "maskVertexShader") else { return }
+            var fragmentFunction: MTLFunction?
+
+            switch maskMode {
+            case .none:
+                fragmentFunction = library.makeFunction(name: "maskFragmentShader")
+            case .Image(let uIImage):
+                fragmentFunction = library.makeFunction(name: "maskImageFragmentShader")
             }
+            
+            guard let fragmentFunction else { return }
             
             let pipelineDescriptor = MTLRenderPipelineDescriptor()
             pipelineDescriptor.label = "Mask Render Pipeline"
@@ -462,6 +487,27 @@ public class ARMetalView: MTKView {
         //        }
     }
     
+    // Add this to your class's public interface
+    public func updateMaskImage(_ image: UIImage) {
+        guard let device = device,
+              let cgImage = image.cgImage else { return }
+        
+        let textureLoader = MTKTextureLoader(device: device)
+        do {
+            let textureOptions: [MTKTextureLoader.Option: Any] = [
+                .SRGB: false,
+                .generateMipmaps: true,
+                .textureUsage: MTLTextureUsage([.shaderRead]).rawValue
+            ]
+            maskTexture = try textureLoader.newTexture(
+                cgImage: cgImage,
+                options: textureOptions
+            )
+        } catch {
+            print("Failed to load mask texture: \(error)")
+        }
+    }
+    
     public override func draw(_ rect: CGRect) {
         
         guard let uniformBuffer = uniformBuffer,
@@ -494,6 +540,16 @@ public class ARMetalView: MTKView {
         // TODO: Create the buffer only once not every frame
         maskEncoder.setVertexBuffer(maskVertexBuffer, offset: 0, index: 0)
         maskEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
+        
+        // Apply the maskImage if present
+        switch maskMode {
+        case .none:
+            break
+        case .Image(let uIImage):
+            maskEncoder.setFragmentTexture(maskTexture, index: 8)
+            maskEncoder.setFragmentSamplerState(samplerState, index: 0)
+        }
+        
         maskEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         maskEncoder.endEncoding()
         

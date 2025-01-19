@@ -8,6 +8,7 @@
 
 import Foundation
 import MetalKit
+import AVFoundation
 
 public protocol ARMetalViewDelegate: AnyObject {
     /// Use this for any animation for every draw call
@@ -17,15 +18,18 @@ public protocol ARMetalViewDelegate: AnyObject {
 enum MaskType{
     case none
     case Image
+    case VideoPlayer
 }
 public enum MaskMode{
     case none
     case Image(UIImage)
+    case VideoPlayer(AVPlayerItemVideoOutput)
     
     var contentType: MaskType {
         switch self {
         case .none: return .none
         case .Image: return .Image
+        case .VideoPlayer: return .VideoPlayer
         }
     }
 }
@@ -58,6 +62,7 @@ public class ARMetalView: MTKView {
     private var isBufferUpdated: Bool = false
     private var maskMode: MaskMode = .none
     private var maskTexture: MTLTexture?
+    // for video player output dont replace or add new video output use the existing output
     
     public init?(frame: CGRect, device: MTLDevice, viewControllerDelegate: ARMetalViewDelegate, maskMode: MaskMode) {
         print("init ARMetalView")
@@ -76,11 +81,24 @@ public class ARMetalView: MTKView {
         self.enableSetNeedsDisplay = true
         
         setupMetal()
+        setupMaskConfiguration(maskMode: maskMode)
         self.viewControllerDelegate = viewControllerDelegate
         //        setupDefaultVertices()
     }
     required init(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+    
+    private func setupMaskConfiguration(maskMode: MaskMode){
+        switch maskMode {
+        case .none:
+            break
+        case .Image(let image):
+            updateMaskImage(image)
+        case .VideoPlayer(let videoOutput):
+            // TODO: Mask as a video
+            break
+        }
     }
     
     /// Use for updating and setting the LayerImage
@@ -100,7 +118,6 @@ public class ARMetalView: MTKView {
         updateVertexBuffer(newExtent: targetSize)
         updateMaskVertices(maskVertexBuffer)
     }
-    
     
     private func updateVertexBuffer(newExtent: CGSize) {
         print("111: updateLayerVertices called with extent: \(newExtent)")
@@ -158,6 +175,8 @@ public class ARMetalView: MTKView {
             let imageName = layer.key
             let layerValues = layer.value
             
+            // TODO: Check for image type and do this
+            // or handle for Video
             if let image = layerValues.image, let cgImage = image.cgImage {
                 do {
                     // Create texture descriptor for high quality
@@ -278,6 +297,8 @@ public class ARMetalView: MTKView {
                 fragmentFunction = library.makeFunction(name: "maskFragmentShader")
             case .Image(let uIImage):
                 fragmentFunction = library.makeFunction(name: "maskImageFragmentShader")
+            case .VideoPlayer(_):
+                break
             }
             
             guard let fragmentFunction else { return }
@@ -488,7 +509,7 @@ public class ARMetalView: MTKView {
     }
     
     // Add this to your class's public interface
-    public func updateMaskImage(_ image: UIImage) {
+    func updateMaskImage(_ image: UIImage) {
         guard let device = device,
               let cgImage = image.cgImage else { return }
         
@@ -548,6 +569,8 @@ public class ARMetalView: MTKView {
         case .Image(let uIImage):
             maskEncoder.setFragmentTexture(maskTexture, index: 8)
             maskEncoder.setFragmentSamplerState(samplerState, index: 0)
+        case .VideoPlayer(_):
+            break
         }
         
         maskEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)

@@ -174,30 +174,41 @@ public class ARMetalView: MTKView {
         for layer in layerImageDic{
             let imageName = layer.key
             let layerValues = layer.value
-            
+            print("layer ids: \(layerValues.id)")
             // TODO: Check for image type and do this
             // or handle for Video
-            if let image = layerValues.image, let cgImage = image.cgImage {
-                do {
-                    // Create texture descriptor for high quality
-                    let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
-                        pixelFormat: .rgba8Unorm,
-                        width: cgImage.width,
-                        height: cgImage.height,
-                        mipmapped: true
-                    )
-                    textureDescriptor.usage = [.shaderRead, .renderTarget]
-                    textureDescriptor.storageMode = .private
-                    textureDescriptor.sampleCount = 1
-                    
-                    layerValues.texture = try textureLoader.newTexture(
-                        cgImage: cgImage,
-                        options: textureOptions
-                    )
-                    //                    print("Layer texture loaded with high quality settings")
-                } catch {
-                    print("Error loading texture: \(error)")
+            switch layerValues.content{
+                
+            case .image(_):
+                if let image = layerValues.image, let cgImage = image.cgImage {
+                    do {
+                        // Create texture descriptor for high quality
+                        let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+                            pixelFormat: .rgba8Unorm,
+                            width: cgImage.width,
+                            height: cgImage.height,
+                            mipmapped: true
+                        )
+                        textureDescriptor.usage = [.shaderRead, .renderTarget]
+                        textureDescriptor.storageMode = .private
+                        textureDescriptor.sampleCount = 1
+                        
+                        layerValues.texture = try textureLoader.newTexture(
+                            cgImage: cgImage,
+                            options: textureOptions
+                        )
+                        //                    print("Layer texture loaded with high quality settings")
+                    } catch {
+                        print("Error loading texture: \(error)")
+                    }
                 }
+            case .video(_):
+                if let cache = createTextureCache(device: device){
+                    layerValues.textureCache = cache
+                } else { print("Failed to create texture cache") }
+//                CVMetalTextureCacheCreate(nil, nil, device,nil, &layerValues.textureCache)
+            case .model(_):
+                break
             }
             layerImages.append(layerValues)
         }
@@ -235,6 +246,31 @@ public class ARMetalView: MTKView {
         createStencilState()
         createSamplerState()
         print("all ARMetal view setup")
+    }
+    
+    public func createTextureCache(device: MTLDevice) -> CVMetalTextureCache? {
+        var textureCache: CVMetalTextureCache?
+        
+        // Set up texture cache attributes
+        let textureAttributes = [
+            kCVMetalTextureCacheMaximumTextureAgeKey: 1,
+            kCVMetalTextureUsage: MTLTextureUsage.shaderRead.rawValue
+        ] as [String: Any]
+        
+        let status = CVMetalTextureCacheCreate(
+            kCFAllocatorDefault,  // Allocator
+            textureAttributes as CFDictionary,  // Cache attributes
+            device,              // Metal device
+            nil,                // Texture attributes (can be nil)
+            &textureCache      // Output texture cache
+        )
+        
+        if status == kCVReturnSuccess {
+            return textureCache
+        } else {
+            print("Failed to create texture cache with status: \(status)")
+            return nil
+        }
     }
     
     private func createSamplerState() {
@@ -552,7 +588,6 @@ public class ARMetalView: MTKView {
         guard let maskEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
             return
         }
-        print("Drawing")
         maskEncoder.setRenderPipelineState(maskRenderPipelineState)
         maskEncoder.setDepthStencilState(writeStencilState)
         maskEncoder.setStencilReferenceValue(1)
@@ -613,17 +648,61 @@ public class ARMetalView: MTKView {
         }
         // Draw each layer
         for i in 0..<layerImages.count {
-            if let texture = layerImages[i].texture {
-                contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
-                contentEncoder.setFragmentTexture(texture, index: i)
+            let currentLayer = layerImages[i]
+            let contentType = currentLayer.content
+            
+            switch contentType {
+            case .image(_):
                 
-                contentEncoder.drawIndexedPrimitives(
-                    type: .triangle,
-                    indexCount: 6,
-                    indexType: .uint16,
-                    indexBuffer: indexBuffers[i],
-                    indexBufferOffset: 0
-                )
+                if let texture = currentLayer.texture {
+                    contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
+                    contentEncoder.setFragmentTexture(texture, index: i)
+                    
+                    contentEncoder.drawIndexedPrimitives(
+                        type: .triangle,
+                        indexCount: 6,
+                        indexType: .uint16,
+                        indexBuffer: indexBuffers[i],
+                        indexBufferOffset: 0
+                    )
+                }
+            case .video(let playerItemVideoOutput, let avplayer):
+                let time = avplayer.currentTime()
+                if let videoOutput = playerItemVideoOutput, let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil), let textureCache = currentLayer.textureCache {
+                    
+                    var cvTexture: CVMetalTexture?
+                    let width = CVPixelBufferGetWidth(pixelBuffer)
+                    let height = CVPixelBufferGetHeight(pixelBuffer)
+                    CVMetalTextureCacheCreateTextureFromImage(
+                        nil,
+                        textureCache,
+                        pixelBuffer,
+                        nil,
+                        .bgra8Unorm,
+                        width,
+                        height,
+                        0,
+                        &cvTexture
+                    )
+                    if let texture = cvTexture {
+                        let metalTexture = CVMetalTextureGetTexture(texture)
+                        contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
+                        contentEncoder.setFragmentTexture(metalTexture, index: i)
+                        
+                        contentEncoder.drawIndexedPrimitives(
+                            type: .triangle,
+                            indexCount: 6,
+                            indexType: .uint16,
+                            indexBuffer: indexBuffers[i],
+                            indexBufferOffset: 0
+                        )
+                    }
+                } else {
+                    print("things ar enot valid")
+                }
+            case .model(let uRL):
+                // TODO: For 3d objects
+                break
             }
         }
         

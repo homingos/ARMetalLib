@@ -17,7 +17,7 @@ public enum ParallaxType: Sendable {
 
 public enum ParallaxContent {
     case image(UIImage)
-    case video(AVPlayer)
+    case video(AVPlayerItemVideoOutput?, AVPlayer)
     case model(URL)  // URL to your 3D model file
     
     var contentType: ParallaxType {
@@ -33,7 +33,7 @@ public enum ParallaxContent {
 /// Used in Metal AR
 public final class LayerImage: @unchecked Sendable {
     let id: Int
-    weak var textureCache: CVMetalTextureCache?
+    var textureCache: CVMetalTextureCache?
     let offset: SIMD3<Float>
     private(set) var content: ParallaxContent
     var texture: MTLTexture?
@@ -53,11 +53,11 @@ public final class LayerImage: @unchecked Sendable {
     }
     
     // Convenience accessor for video content
-    var videoPlayer: AVPlayer? {
-        if case .video(let player) = content {
-            return player
+    var videoPlayerOutput: (AVPlayerItemVideoOutput?, AVPlayer?) {
+        if case .video(let playerVideoOutput, let avplayer) = content {
+            return (playerVideoOutput, avplayer)
         }
-        return nil
+        return (nil, nil)
     }
     
     // Convenience accessor for model content
@@ -70,10 +70,10 @@ public final class LayerImage: @unchecked Sendable {
     
     // Initializer with ParallaxContent
     public init(id: Int,
-               offset: SIMD3<Float>,
-               content: ParallaxContent,
-               texture: MTLTexture? = nil,
-               scale: Float = 1.0) {
+                offset: SIMD3<Float>,
+                content: ParallaxContent,
+                texture: MTLTexture? = nil,
+                scale: Float = 1.0) {
         self.id = id
         self.offset = offset
         self.content = content
@@ -83,36 +83,46 @@ public final class LayerImage: @unchecked Sendable {
     
     // Convenience initializer for images
     public convenience init(id: Int,
-                          offset: SIMD3<Float>,
-                          image: UIImage,
-                          texture: MTLTexture? = nil,
-                          scale: Float = 1.0) {
+                            offset: SIMD3<Float>,
+                            image: UIImage,
+                            texture: MTLTexture? = nil,
+                            scale: Float = 1.0) {
         self.init(id: id,
-                 offset: offset,
-                 content: .image(image),
-                 texture: texture,
-                 scale: scale)
+                  offset: offset,
+                  content: .image(image),
+                  texture: texture,
+                  scale: scale)
     }
     
     // Convenience initializer for videos
     public convenience init(id: Int,
-                          offset: SIMD3<Float>,
-                          videoPlayer: AVPlayer,
-                          texture: MTLTexture? = nil,
-                          scale: Float = 1.0) {
+                            offset: SIMD3<Float>,
+                            videoPlayerOutput: AVPlayerItemVideoOutput?,
+                            avplayer: AVPlayer,
+                            texture: MTLTexture? = nil,
+                            scale: Float = 1.0) {
         self.init(id: id,
-                 offset: offset,
-                 content: .video(videoPlayer),
-                 texture: texture,
-                 scale: scale)
+                  offset: offset,
+                  content: .video(videoPlayerOutput, avplayer),
+                  texture: texture,
+                  scale: scale)
     }
     
     func copy() -> LayerImage {
         return LayerImage(id: id,
-                         offset: offset,
-                         content: content,
-                         texture: texture,
-                         scale: scale)
+                          offset: offset,
+                          content: content,
+                          texture: texture,
+                          scale: scale)
+    }
+    
+    public func setVideoPlayerOutput(_ output: AVPlayerItemVideoOutput, player: AVPlayer) {
+        if case .video(_, _) = content {
+            content = .video(output, player)
+            print("content set to \(content)")
+        } else {
+            print("Warning: Cannot set video output - content is not of type video")
+        }
     }
     
     var description: String {

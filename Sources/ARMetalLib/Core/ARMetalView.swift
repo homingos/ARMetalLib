@@ -114,7 +114,6 @@ public class ARMetalView: MTKView {
     
     /// Updated the Extent of the rendering Plane
     public func setTargetSize(targetSize: CGSize){
-        print("target size: \(targetSize)")
         targetExtent = targetSize
         updateVertexBuffer(newExtent: targetSize)
         updateMaskVertices(maskVertexBuffer)
@@ -537,9 +536,6 @@ public class ARMetalView: MTKView {
         self.anchorTransform = anchorTransform
         self.cameraTransform = cameraTransform
         self.projectionMatrix = projectionMatrix
-        print("anchorTransform: \(anchorTransform)")
-        print("cameraTransform: \(cameraTransform ?? simd_float4x4())")
-        print("projectionMatrix: \(projectionMatrix)")
         if (layerImages.count == vertexBuffers.count) && isBufferUpdated{
             setNeedsDisplay()
         }

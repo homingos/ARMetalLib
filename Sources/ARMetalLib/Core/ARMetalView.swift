@@ -175,7 +175,7 @@ public class ARMetalView: MTKView {
         for layer in layerImageDic{
             let imageName = layer.key
             let layerValues = layer.value
-            print("layer ids: \(layerValues.id)")
+            print("layer ids: \(layerValues.id) + \(layer)")
             // TODO: Check for image type and do this
             // or handle for Video
             switch layerValues.content{

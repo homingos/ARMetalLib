@@ -48,7 +48,7 @@ public class ARMetalView: MTKView {
     private var projectionMatrix: simd_float4x4?
     
     private var layerImages: [LayerImage] = []
-    private var layerImageDic: [String: LayerImage] = [:]
+    private var layerImageDic: [Int: LayerImage] = [:]
     
     private var stencilState: MTLDepthStencilState?
     private var maskRenderPipelineState: MTLRenderPipelineState!
@@ -102,7 +102,7 @@ public class ARMetalView: MTKView {
     }
     
     /// Use for updating and setting the LayerImage
-    public func updateLayerImage(layerImage: [String: LayerImage]){
+    public func updateLayerImage(layerImage: [Int: LayerImage]){
         self.layerImageDic = layerImage
         print("Recieved layerImage: \(layerImage)")
         setLayerImage(layerImage: layerImage)
@@ -159,7 +159,7 @@ public class ARMetalView: MTKView {
         }
     }
     
-    private func setLayerImage(layerImage: [String: LayerImage]){
+    private func setLayerImage(layerImage: [Int: LayerImage]){
         guard let device else { return }
         
         let textureLoader = MTKTextureLoader(device: device)
@@ -622,7 +622,7 @@ public class ARMetalView: MTKView {
         contentEncoder.setStencilReferenceValue(1)  // Must match the value written in the mask pass
         contentEncoder.setFragmentSamplerState(samplerState, index: 0)
         
-        // Update and set uniforms
+        // TODO: Update this for supporting multi-Parallax
         updateUniforms(uniformBuffer)
         contentEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
         let copiedLayerImages = layerImages.map { $0.copy() }

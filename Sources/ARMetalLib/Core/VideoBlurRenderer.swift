@@ -54,6 +54,21 @@ public class VideoBlurRenderer {
         texture = device.makeTexture(descriptor: textureDescriptor)
     }
     
+    public func updateDimensions(width: Int, height: Int) {
+        // Release existing texture if any
+        texture = nil
+        
+        // Setup new texture with updated dimensions
+        let textureDescriptor = MTLTextureDescriptor()
+        textureDescriptor.textureType = .type2D
+        textureDescriptor.width = width
+        textureDescriptor.height = height
+        textureDescriptor.pixelFormat = .bgra8Unorm
+        textureDescriptor.usage = [.renderTarget, .shaderRead, .shaderWrite]
+        
+        texture = device.makeTexture(descriptor: textureDescriptor)
+    }
+    
     public func processVideoFrame(player: AVPlayer, videoOutput: AVPlayerItemVideoOutput, completion: @escaping (MTLTexture?) -> Void) {
         guard let currentItem = player.currentItem else {
             completion(nil)

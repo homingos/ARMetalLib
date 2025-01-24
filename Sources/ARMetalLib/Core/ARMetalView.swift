@@ -679,12 +679,28 @@ public class ARMetalView: MTKView {
             case .video(let playerItemVideoOutput, let avplayer):
                 let avplayer = currentLayer.avPlayer
                 let time = avplayer?.currentTime() ?? CMTimeMake(value: 1, timescale: 1)
+
+                guard let videoOutput = playerItemVideoOutput else {
+                    print("VideoOutput is nil for layer \(currentLayer.id)")
+                    return
+                }
+                
+                guard let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) else {
+                    print("Failed to copy pixel buffer at time: \(time.seconds) for layer \(currentLayer.id)")
+                    return
+                }
+                
+                guard let textureCache = currentLayer.textureCache else {
+                    print("TextureCache is nil for layer \(currentLayer.id)")
+                    return
+                }
+                
                 if let videoOutput = playerItemVideoOutput, let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil), let textureCache = currentLayer.textureCache {
                     
                     var cvTexture: CVMetalTexture?
                     let width = CVPixelBufferGetWidth(pixelBuffer)
                     let height = CVPixelBufferGetHeight(pixelBuffer)
-                    CVMetalTextureCacheCreateTextureFromImage(
+                    let status = CVMetalTextureCacheCreateTextureFromImage(
                         nil,
                         textureCache,
                         pixelBuffer,
@@ -695,19 +711,18 @@ public class ARMetalView: MTKView {
                         0,
                         &cvTexture
                     )
-//                    if let cvTexture = currentVideoTextures[currentLayer.id],
-//                       let metalTexture = CVMetalTextureGetTexture(cvTexture) {
-//                        contentEncoder.setVertexBuffer(vertexBuffers[i], offset: 0, index: 0)
-//                        contentEncoder.setFragmentTexture(metalTexture, index: i)
-//                        
-//                        contentEncoder.drawIndexedPrimitives(
-//                            type: .triangle,
-//                            indexCount: 6,
-//                            indexType: .uint16,
-//                            indexBuffer: indexBuffers[i],
-//                            indexBufferOffset: 0
-//                        )
-//                    }
+
+                    if status != kCVReturnSuccess {
+                        print("Failed to create texture from image with status: \(status)")
+                        return
+                    }
+                    
+                    guard let texture = cvTexture,
+                          let metalTexture = CVMetalTextureGetTexture(texture) else {
+                        print("Failed to get Metal texture")
+                        return
+                    }
+                    
                     if let texture = cvTexture {
                         let metalTexture = CVMetalTextureGetTexture(texture)
                         contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
@@ -789,9 +804,6 @@ public class ARMetalView: MTKView {
         print("deinit called for ARMetalView")
         
         layerImages.forEach { layer in
-            layer.videoTextureCache.removeAll()
-            layer.currentVideoTextures.removeAll()
-            layer.videoPixelBuffers.removeAll()
             layer.videoPlaybackObservers.removeAll()
             
             for (_, observer) in layer.videoPlaybackObservers {

@@ -57,8 +57,8 @@ public class ARMetalView: MTKView {
     private var cameraTransform: simd_float4x4?
     private var projectionMatrix: simd_float4x4?
     
-    private var layerImages: [LayerImage] = []
-    private var layerImageDic: [Int: LayerImage] = [:]
+    var layerImages: [LayerImage] = []
+    var layerImageDic: [Int: LayerImage] = [:]
     
     private var stencilState: MTLDepthStencilState?
     private var maskRenderPipelineState: MTLRenderPipelineState!

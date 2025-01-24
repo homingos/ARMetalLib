@@ -47,11 +47,6 @@ public class LayerImage: @unchecked Sendable {
     private var timeObserverToken: Any?
     private var statusObserver: NSKeyValueObservation?
     
-    // Video playback properties
-    var videoTextureCache: [Int: CVMetalTextureCache] = [:]
-    var currentVideoTextures: [Int: CVMetalTexture] = [:]
-    var videoPixelBuffers: [Int: CVPixelBuffer] = [:]
-    
     var videoPlaybackObservers: [Int: Any] = [:]
     
     // Public getter for AVPlayer

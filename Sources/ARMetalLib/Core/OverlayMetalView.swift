@@ -652,7 +652,7 @@ public class OverlayMetalView: MTKView {
                 }
                 
                 let videoOutput = playerItemVideoOutput
-                let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil)
+                let pixelBuffer = videoOutput?.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil)
                 
                 if pixelBuffer == nil {
                     print("pixelBuffer is nil for time: \(time)")

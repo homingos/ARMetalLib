@@ -219,6 +219,8 @@ public class ARMetalView: MTKView {
 //                CVMetalTextureCacheCreate(nil, nil, device,nil, &layerValues.textureCache)
             case .model(_):
                 break
+            case .videov2:
+                break
             }
             layerImages.append(layerValues)
         }
@@ -739,8 +741,68 @@ public class ARMetalView: MTKView {
                 } else {
                     print("things ar enot valid")
                 }
-            case .model(let uRL):
+            case .model(let uRL): break
                 // TODO: For 3d objects
+                
+            case .videov2:
+                let avplayer = currentLayer.avPlayer
+                let time = avplayer?.currentTime() ?? CMTimeMake(value: 1, timescale: 1)
+                
+                guard let videoOutput = currentLayer.videoOutput else {
+                    print("VideoOutput is nil for layer \(currentLayer.id)")
+                    return
+                }
+                
+                guard let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) else {
+                    print("Failed to copy pixel buffer at time: \(time.seconds) for layer \(currentLayer.id)")
+                    return
+                }
+                
+                guard let textureCache = currentLayer.textureCache else {
+                    print("TextureCache is nil for layer \(currentLayer.id)")
+                    return
+                }
+                    
+                var cvTexture: CVMetalTexture?
+                let width = CVPixelBufferGetWidth(pixelBuffer)
+                let height = CVPixelBufferGetHeight(pixelBuffer)
+                let status = CVMetalTextureCacheCreateTextureFromImage(
+                    nil,
+                    textureCache,
+                    pixelBuffer,
+                    nil,
+                    .bgra8Unorm,
+                    width,
+                    height,
+                    0,
+                    &cvTexture
+                )
+                
+                if status != kCVReturnSuccess {
+                    print("Failed to create texture from image with status: \(status)")
+                    return
+                }
+                
+                guard let texture = cvTexture,
+                      let metalTexture = CVMetalTextureGetTexture(texture) else {
+                    print("Failed to get Metal texture")
+                    return
+                }
+                
+                if let texture = cvTexture {
+                    let metalTexture = CVMetalTextureGetTexture(texture)
+                    contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
+                    contentEncoder.setFragmentTexture(metalTexture, index: i)
+                    
+                    contentEncoder.drawIndexedPrimitives(
+                        type: .triangle,
+                        indexCount: 6,
+                        indexType: .uint16,
+                        indexBuffer: indexBuffers[i],
+                        indexBufferOffset: 0
+                    )
+                }
+                
                 break
             }
         }

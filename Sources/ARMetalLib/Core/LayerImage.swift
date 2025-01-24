@@ -21,12 +21,14 @@ public enum ParallaxContent {
     case image(UIImage)
     case video(AVPlayerItemVideoOutput?, AVPlayer)
     case model(URL)  // URL to your 3D model file
+    case videov2
     
     var contentType: ParallaxType {
         switch self {
         case .image: return .Image
         case .video: return .Video
         case .model: return .Model3D
+        case .videov2: return .Video
         }
     }
 }
@@ -49,12 +51,33 @@ public class LayerImage: @unchecked Sendable {
     
     var videoPlaybackObservers: [Int: Any] = [:]
     
-    // Public getter for AVPlayer
     public var avPlayer: AVPlayer? {
-        if case .video(_, let player) = content {
-            return player
+        get {
+            if case .video(let output, let player) = content {
+                return player
+            }
+            return nil
         }
-        return nil
+        set {
+            if case .video(let output, _) = content {
+                content = .video(output, newValue ?? AVPlayer())
+            }
+        }
+    }
+    
+    // Getter and setter for VideoOutput
+    public var videoOutput: AVPlayerItemVideoOutput? {
+        get {
+            if case .video(let output, let player) = content {
+                return output
+            }
+            return nil
+        }
+        set {
+            if case .video(_, let player) = content {
+                content = .video(newValue, player)
+            }
+        }
     }
     
     // Video state management
@@ -153,6 +176,7 @@ public class LayerImage: @unchecked Sendable {
         case .image: contentDescription = "Image"
         case .video: contentDescription = "Video"
         case .model: contentDescription = "3D Model"
+        case .videov2: contentDescription = "Video"
         }
         let textureDescription = texture != nil ? "Texture present" : "No texture"
         
@@ -176,7 +200,8 @@ extension LayerImage {
     
     public func setupVideoContent(with url: URL, device: MTLDevice) {
         // Create AVPlayer and AVPlayerItem
-        let player = AVPlayer(url: url)
+        avPlayer = AVPlayer(url: url)
+        guard let player = avPlayer else { return }
         let playerItem = player.currentItem
         
         // Create texture cache synchronously if needed
@@ -191,15 +216,17 @@ extension LayerImage {
             guard let self = self else { return }
             
             // Create video output
-            let videoOutput = AVPlayerItemVideoOutput(pixelBufferAttributes: [
+            videoOutput = AVPlayerItemVideoOutput(pixelBufferAttributes: [
                 kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
                 kCVPixelBufferMetalCompatibilityKey as String: true
             ])
             
-            playerItem?.add(videoOutput)
+            if let out = videoOutput {
+                playerItem?.add(out)
+            }
             
             // Update content
-            self.content = .video(videoOutput, player)
+            self.content = .videov2
             self.isVideoSetup = true
             
             // Set up time observer for frame updates

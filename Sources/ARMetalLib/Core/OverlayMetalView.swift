@@ -644,38 +644,75 @@ public class OverlayMetalView: MTKView {
                 }
             case .video(let playerItemVideoOutput, let avplayer):
                 let time = avplayer.currentTime()
-                if let videoOutput = playerItemVideoOutput, let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil), let textureCache = currentLayer.textureCache {
-                    
-                    var cvTexture: CVMetalTexture?
-                    let width = CVPixelBufferGetWidth(pixelBuffer)
-                    let height = CVPixelBufferGetHeight(pixelBuffer)
-                    CVMetalTextureCacheCreateTextureFromImage(
-                        nil,
-                        textureCache,
-                        pixelBuffer,
-                        nil,
-                        .bgra8Unorm,
-                        width,
-                        height,
-                        0,
-                        &cvTexture
-                    )
-                    if let texture = cvTexture {
-                        let metalTexture = CVMetalTextureGetTexture(texture)
-                        contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
-                        contentEncoder.setFragmentTexture(metalTexture, index: i)
-                        
-                        contentEncoder.drawIndexedPrimitives(
-                            type: .triangle,
-                            indexCount: 6,
-                            indexType: .uint16,
-                            indexBuffer: indexBuffers[i],
-                            indexBufferOffset: 0
-                        )
-                    }
-                } else {
-                    print("things ar enot valid")
+                print("Current time: \(time)")
+                
+                if playerItemVideoOutput == nil {
+                    print("playerItemVideoOutput is nil")
+                    return
                 }
+                
+                let videoOutput = playerItemVideoOutput
+                let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil)
+                
+                if pixelBuffer == nil {
+                    print("pixelBuffer is nil for time: \(time)")
+                    print("Player status: \(avplayer.status.rawValue)")
+                    print("Current item status: \(String(describing: avplayer.currentItem?.status.rawValue))")
+                    return
+                }
+                
+                if currentLayer.textureCache == nil {
+                    print("textureCache is nil for layer: \(currentLayer.id)")
+                    return
+                }
+                
+                let textureCache = currentLayer.textureCache
+                var cvTexture: CVMetalTexture?
+                let width = CVPixelBufferGetWidth(pixelBuffer!)
+                let height = CVPixelBufferGetHeight(pixelBuffer!)
+                
+                print("Attempting to create texture with width: \(width), height: \(height)")
+                
+                let result = CVMetalTextureCacheCreateTextureFromImage(
+                    nil,
+                    textureCache!,
+                    pixelBuffer!,
+                    nil,
+                    .bgra8Unorm,
+                    width,
+                    height,
+                    0,
+                    &cvTexture
+                )
+                
+                if result != kCVReturnSuccess {
+                    print("Failed to create texture from image with error: \(result)")
+                    return
+                }
+                
+                if cvTexture == nil {
+                    print("cvTexture is nil after creation")
+                    return
+                }
+                
+                let metalTexture = CVMetalTextureGetTexture(cvTexture!)
+                if metalTexture == nil {
+                    print("metalTexture is nil after getting from cvTexture")
+                    return
+                }
+                
+                contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
+                contentEncoder.setFragmentTexture(metalTexture, index: i)
+                
+                contentEncoder.drawIndexedPrimitives(
+                    type: .triangle,
+                    indexCount: 6,
+                    indexType: .uint16,
+                    indexBuffer: indexBuffers[i],
+                    indexBufferOffset: 0
+                )
+                
+                print("Successfully rendered frame at time: \(time)")
             case .model(let uRL):
                 // TODO: For 3d objects
                 break

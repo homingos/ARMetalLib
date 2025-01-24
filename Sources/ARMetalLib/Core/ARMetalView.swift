@@ -810,5 +810,7 @@ extension ARMetalView {
     public func setupVideoContent(for layer: LayerImage, with url: URL) {
         guard let device = self.device else { return }
         layer.setupVideoContent(with: url, device: device)
+        
+        layer.avPlayer?.play()
     }
 }

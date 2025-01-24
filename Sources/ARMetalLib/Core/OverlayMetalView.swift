@@ -79,7 +79,7 @@ public class OverlayMetalView: MTKView {
     /// Use for updating and setting the LayerImage
     public func updateLayerImage(layerImage: [Int: OverlayLayer]){
         self.layerImageDic = layerImage
-        print("Recieved layerImage: \(layerImage)")
+        print("Recieved Overlay layerImage: \(layerImage)")
         setLayerImage(layerImage: layerImage)
     }
     

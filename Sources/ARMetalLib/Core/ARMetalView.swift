@@ -9,6 +9,16 @@
 import Foundation
 import MetalKit
 import AVFoundation
+import Metal
+import CoreVideo
+
+// Add this protocol for video delegate
+public protocol ARMetalViewVideoDelegate: AnyObject {
+    func videoDidFinishPlaying(layerId: Int)
+    func videoDidFailToPlay(layerId: Int, error: Error?)
+    func videoDidChangeStatus(layerId: Int, status: AVPlayer.Status)
+    func videoDidUpdateProgress(layerId: Int, time: CMTime, duration: CMTime)
+}
 
 public protocol ARMetalViewDelegate: AnyObject {
     /// Use this for any animation for every draw call
@@ -667,7 +677,8 @@ public class ARMetalView: MTKView {
                     )
                 }
             case .video(let playerItemVideoOutput, let avplayer):
-                let time = avplayer.currentTime()
+                let avplayer = currentLayer.avPlayer
+                let time = avplayer?.currentTime() ?? CMTimeMake(value: 1, timescale: 1)
                 if let videoOutput = playerItemVideoOutput, let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil), let textureCache = currentLayer.textureCache {
                     
                     var cvTexture: CVMetalTexture?
@@ -684,6 +695,19 @@ public class ARMetalView: MTKView {
                         0,
                         &cvTexture
                     )
+//                    if let cvTexture = currentVideoTextures[currentLayer.id],
+//                       let metalTexture = CVMetalTextureGetTexture(cvTexture) {
+//                        contentEncoder.setVertexBuffer(vertexBuffers[i], offset: 0, index: 0)
+//                        contentEncoder.setFragmentTexture(metalTexture, index: i)
+//                        
+//                        contentEncoder.drawIndexedPrimitives(
+//                            type: .triangle,
+//                            indexCount: 6,
+//                            indexType: .uint16,
+//                            indexBuffer: indexBuffers[i],
+//                            indexBufferOffset: 0
+//                        )
+//                    }
                     if let texture = cvTexture {
                         let metalTexture = CVMetalTextureGetTexture(texture)
                         contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
@@ -763,7 +787,28 @@ public class ARMetalView: MTKView {
     
     deinit {
         print("deinit called for ARMetalView")
+        
+        layerImages.forEach { layer in
+            layer.videoTextureCache.removeAll()
+            layer.currentVideoTextures.removeAll()
+            layer.videoPixelBuffers.removeAll()
+            layer.videoPlaybackObservers.removeAll()
+            
+            for (_, observer) in layer.videoPlaybackObservers {
+                if let observer = observer as? NSObject {
+                    // Remove video playback observers
+                }
+            }
+        }
         layerImages.removeAll()
         layerImageDic.removeAll()
+    }
+}
+
+extension ARMetalView {
+    
+    public func setupVideoContent(for layer: LayerImage, with url: URL) {
+        guard let device = self.device else { return }
+        layer.setupVideoContent(with: url, device: device)
     }
 }

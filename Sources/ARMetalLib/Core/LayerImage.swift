@@ -8,6 +8,8 @@
 import Metal
 import UIKit
 import AVFoundation
+import CoreVideo
+import MetalKit
 
 public enum ParallaxType: Sendable {
     case Image
@@ -31,13 +33,37 @@ public enum ParallaxContent {
 
 /// class for holding Parallax Layer images data
 /// Used in Metal AR
-public final class LayerImage: @unchecked Sendable {
+public class LayerImage: @unchecked Sendable {
     let id: Int
     var textureCache: CVMetalTextureCache?
     let offset: SIMD3<Float>
     private(set) var content: ParallaxContent
     var texture: MTLTexture?
     var scale: Float
+    
+    // Video-specific properties
+    private var videoPixelBuffer: CVPixelBuffer?
+    private var currentVideoTexture: CVMetalTexture?
+    private var timeObserverToken: Any?
+    private var statusObserver: NSKeyValueObservation?
+    
+    // Video playback properties
+    var videoTextureCache: [Int: CVMetalTextureCache] = [:]
+    var currentVideoTextures: [Int: CVMetalTexture] = [:]
+    var videoPixelBuffers: [Int: CVPixelBuffer] = [:]
+    
+    var videoPlaybackObservers: [Int: Any] = [:]
+    
+    // Public getter for AVPlayer
+    public var avPlayer: AVPlayer? {
+        if case .video(_, let player) = content {
+            return player
+        }
+        return nil
+    }
+    
+    // Video state management
+    private(set) var isVideoSetup: Bool = false
     
     // Computed property to access the type
     var type: ParallaxType {
@@ -144,5 +170,145 @@ public final class LayerImage: @unchecked Sendable {
         - Content: \(contentDescription)
         - Texture: \(textureDescription)
         """
+    }
+    
+    deinit {
+        cleanup()
+    }
+}
+
+extension LayerImage {
+    
+    public func setupVideoContent(with url: URL, device: MTLDevice) {
+        // Create AVPlayer and AVPlayerItem
+        let player = AVPlayer(url: url)
+        let playerItem = player.currentItem
+        
+        // Create texture cache synchronously if needed
+        if self.textureCache == nil {
+            var newTextureCache: CVMetalTextureCache?
+            CVMetalTextureCacheCreate(nil, nil, device, nil, &newTextureCache)
+            self.textureCache = newTextureCache
+        }
+        
+        // Create video output on main thread
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Create video output
+            let videoOutput = AVPlayerItemVideoOutput(pixelBufferAttributes: [
+                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+                kCVPixelBufferMetalCompatibilityKey as String: true
+            ])
+            
+            playerItem?.add(videoOutput)
+            
+            // Update content
+            self.content = .video(videoOutput, player)
+            self.isVideoSetup = true
+            
+            // Set up time observer for frame updates
+            let interval = CMTime(seconds: 1.0/30.0, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+            self.timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+                self?.updateVideoFrame(at: time)
+            }
+        }
+    }
+    
+    private func updateVideoFrame(at time: CMTime) {
+        guard case .video(let videoOutput?, _) = content else { return }
+        
+        if let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) {
+            self.videoPixelBuffer = pixelBuffer
+            // Note: The actual texture update will happen in the draw call
+        }
+    }
+    
+    // Method to update video texture during render
+    func updateVideoTexture() -> MTLTexture? {
+        guard let pixelBuffer = videoPixelBuffer,
+              let textureCache = textureCache else { return nil }
+        
+        var texture: CVMetalTexture?
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        
+        CVMetalTextureCacheCreateTextureFromImage(
+            nil,
+            textureCache,
+            pixelBuffer,
+            nil,
+            .bgra8Unorm,
+            width,
+            height,
+            0,
+            &texture
+        )
+        
+        if let cvTexture = texture {
+            currentVideoTexture = cvTexture
+            return CVMetalTextureGetTexture(cvTexture)
+        }
+        return nil
+    }
+    
+    func cleanup() {
+        if let token = timeObserverToken,
+           case .video(_, let player) = content {
+            player.removeTimeObserver(token)
+        }
+        timeObserverToken = nil
+        statusObserver?.invalidate()
+        statusObserver = nil
+        videoPixelBuffer = nil
+        currentVideoTexture = nil
+    }
+    
+    public func playVideo() {
+        DispatchQueue.main.async {
+            if let player = self.avPlayer {
+                player.play()
+            }
+        }
+    }
+    
+    public func pauseVideo() {
+        DispatchQueue.main.async {
+            if let player = self.avPlayer {
+                player.pause()
+            }
+        }
+    }
+    
+    public func seekVideo(for layer: LayerImage, to time: CMTime) {
+        if let player = layer.avPlayer {
+            player.seek(to: time)
+        }
+    }
+    
+    // MARK: - Loop Control
+    
+    public func setVideoLoop(for layer: LayerImage, shouldLoop: Bool) {
+        
+        guard let avPlayer = layer.avPlayer else { return }
+        NotificationCenter.default.removeObserver(self,
+                                                  name: .AVPlayerItemDidPlayToEndTime,
+                                                  object: avPlayer.currentItem)
+        
+        NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: avPlayer.currentItem,
+            queue: .main
+        ) { [weak self] notification in
+            guard let strongSelf = self else { return }
+            
+            if shouldLoop {
+                // play from beginning
+//                self?.seekVideo(for: layer, to: .zero)
+//                self?.playVideo(for: layer)
+            }
+            
+//            self.videoDelegate?.videoDidFinishPlaying(layerId: layerId)
+        }
     }
 }

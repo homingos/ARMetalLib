@@ -230,12 +230,6 @@ extension LayerImage {
             strongSelf.content = .video(videoPOutput, player)
             strongSelf.isVideoSetup = true
             
-            // Set up time observer for frame updates
-            let interval = CMTime(seconds: 1.0/30.0, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-            self?.timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-                self?.updateVideoFrame(at: time)
-            }
-            
             player.play()
         }
     }

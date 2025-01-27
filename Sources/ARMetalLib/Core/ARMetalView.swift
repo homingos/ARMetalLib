@@ -684,7 +684,6 @@ public class ARMetalView: MTKView {
                     print("TextureCache is nil for layer \(key)")
                     continue
                 }
-                print("pop: ")
                 
                 var cvTexture: CVMetalTexture?
                 let width = CVPixelBufferGetWidth(pixelBuffer)

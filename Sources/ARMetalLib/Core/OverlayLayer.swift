@@ -8,6 +8,16 @@ import Metal
 import UIKit
 import AVFoundation
 
+public enum AlphaVideoType{
+    case LR
+    case TD
+}
+
+public enum VideoType{
+    case normal
+    case alpha(config: AlphaVideoType)
+}
+
 /// class for holding Parallax Layer images data
 /// Used in Metal AR
 public final class OverlayLayer: @unchecked Sendable {
@@ -17,6 +27,7 @@ public final class OverlayLayer: @unchecked Sendable {
     private(set) var content: ParallaxContent
     var texture: MTLTexture?
     var scale: Float
+    var videoType: VideoType = .normal
     
     // Computed property to access the type
     var type: ParallaxType {
@@ -33,7 +44,7 @@ public final class OverlayLayer: @unchecked Sendable {
     
     // Convenience accessor for video content
     var videoPlayerOutput: (AVPlayerItemVideoOutput?, AVPlayer?) {
-        if case .video(let playerVideoOutput, let avplayer) = content {
+        if case .video(let playerVideoOutput, let avplayer, let videoType) = content {
             return (playerVideoOutput, avplayer)
         }
         return (nil, nil)
@@ -79,10 +90,10 @@ public final class OverlayLayer: @unchecked Sendable {
                             videoPlayerOutput: AVPlayerItemVideoOutput?,
                             avplayer: AVPlayer,
                             texture: MTLTexture? = nil,
-                            scale: Float = 1.0) {
+                            scale: Float = 1.0, videoType: VideoType) {
         self.init(id: id,
                   offset: offset,
-                  content: .video(videoPlayerOutput, avplayer),
+                  content: .video(videoPlayerOutput, avplayer, videoType),
                   texture: texture,
                   scale: scale)
     }
@@ -96,8 +107,8 @@ public final class OverlayLayer: @unchecked Sendable {
     }
     
     public func setVideoPlayerOutput(_ output: AVPlayerItemVideoOutput, player: AVPlayer) {
-        if case .video(_, _) = content {
-            content = .video(output, player)
+        if case .video(_, _, let videoType) = content {
+            content = .video(output, player, videoType)
             print("content set to \(content)")
         } else {
             print("Warning: Cannot set video output - content is not of type video")

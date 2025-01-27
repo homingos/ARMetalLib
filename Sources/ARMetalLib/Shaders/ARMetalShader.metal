@@ -20,7 +20,7 @@ struct VertexOut {
     uint textureIndex;
 };
 
-// Mask vertex shader - now includes texture coordinates for mask image
+// Existing vertex shaders remain the same
 vertex VertexOut maskVertexShader(VertexIn in [[stage_in]], constant float4x4 *matrices [[buffer(1)]]) {
     VertexOut out;
     
@@ -40,28 +40,23 @@ vertex VertexOut maskVertexShader(VertexIn in [[stage_in]], constant float4x4 *m
 fragment float4 maskImageFragmentShader(VertexOut in [[stage_in]],
                                  texture2d<float> maskTexture [[texture(8)]],
                                  sampler textureSampler [[sampler(0)]]) {
-    // Sample the mask texture
     float4 maskColor = maskTexture.sample(textureSampler, in.texCoord);
     
-    // Use the red channel threshold to determine stencil writing
-    // Pixels where the mask is lighter than 0.5 will be written to stencil
     bool shouldWrite = maskColor.r > 0.5;
     
-    // Discard fragment if it shouldn't be written to stencil
     if (!shouldWrite) {
         discard_fragment();
     }
     
-    return float4(0.0, 0.0, 0.0, maskColor.r);  // Color doesn't matter as we're only writing to stencil
+    return float4(0.0, 0.0, 0.0, maskColor.r);
 }
 
-// Mask fragment shader - writes to stencil buffer
+// Existing mask fragment shader
 fragment float4 maskFragmentShader(VertexOut in [[stage_in]]) {
-    // Return clear color but we'll write to stencil buffer
     return float4(0.0, 0.0, 0.0, 0.0);
 }
 
-// Main vertex shader
+// Main vertex shader remains the same
 vertex VertexOut vertexShader(VertexIn in [[stage_in]], constant float4x4 *matrices [[buffer(1)]]) {
     VertexOut out;
     
@@ -77,17 +72,52 @@ vertex VertexOut vertexShader(VertexIn in [[stage_in]], constant float4x4 *matri
     return out;
 }
 
-// Main fragment shader
-fragment float4 fragmentShader(VertexOut in [[stage_in]],
-                                  array<texture2d<float>, 8> textures [[texture(0)]],
-                                  sampler textureSampler [[sampler(0)]]) {
-    // Sample from the appropriate texture based on the index
-    float4 color = textures[in.textureIndex].sample(textureSampler, in.texCoord);
+// NEW: Custom fragment shader with split texture coordinates
+fragment float4 fragmentShaderSplitTextureLR(VertexOut in [[stage_in]],
+                                         array<texture2d<float>, 8> textures [[texture(0)]],
+                                         sampler textureSampler [[sampler(0)]]) {
+    // Modify texture coordinates as per original code
+    float2 textureCoordinates = in.texCoord;
+    textureCoordinates.x = textureCoordinates.x / 2.0;
     
+    // Sample the main texture
+    float4 textureColor = textures[in.textureIndex].sample(textureSampler, textureCoordinates);
+    
+    // Sample the alpha portion from the same texture but offset
+    float4 alphaColor = textures[in.textureIndex].sample(textureSampler, float2(0.5, 0.0) + textureCoordinates);
+    
+    // Use the red channel of the alpha portion as the alpha value
+    textureColor.a = alphaColor.r;
+    
+    return textureColor;
+}
+
+fragment float4 fragmentShaderSplitTD(VertexOut in [[stage_in]],
+                                      array<texture2d<float>, 8> textures [[texture(0)]],
+                                      sampler textureSampler [[sampler(0)]]) {
+    // Modify texture coordinates as per original code
+    float2 textureCoordinates = in.texCoord;
+    textureCoordinates.x = textureCoordinates.y / 2.0;
+    
+    // Sample the main texture
+    float4 textureColor = textures[in.textureIndex].sample(textureSampler, textureCoordinates);
+    
+    // Sample the alpha portion from the same texture but offset
+    float4 alphaColor = textures[in.textureIndex].sample(textureSampler, float2(0.0, 0.5) + textureCoordinates);
+    
+    // Use the red channel of the alpha portion as the alpha value
+    textureColor.a = alphaColor.r;
+    
+    return textureColor;
+}
+
+// Existing main fragment shader
+fragment float4 fragmentShader(VertexOut in [[stage_in]], array<texture2d<float>, 8> textures [[texture(0)]], sampler textureSampler [[sampler(0)]]) {
+    float4 color = textures[in.textureIndex].sample(textureSampler, in.texCoord);
     return color;
 }
 
-// Main vertex shader with mask
+// Existing vertex shader with mask
 vertex VertexOut vertexShaderWithMask(VertexIn in [[stage_in]],
                                     constant float4x4 *matrices [[buffer(1)]]) {
     VertexOut out;
@@ -104,18 +134,36 @@ vertex VertexOut vertexShaderWithMask(VertexIn in [[stage_in]],
     return out;
 }
 
-// Fragment shader with mask texture
+// NEW: Modified fragment shader with mask and split texture
+fragment float4 fragmentShaderSplitTextureWithMask(VertexOut in [[stage_in]],
+                                                 array<texture2d<float>, 8> textures [[texture(0)]],
+                                                 texture2d<float> maskTexture [[texture(8)]],
+                                                 sampler textureSampler [[sampler(0)]]) {
+    // Modify texture coordinates
+    float2 textureCoordinates = in.texCoord;
+    textureCoordinates.x = textureCoordinates.x / 2.0;
+    
+    // Sample the main texture
+    float4 textureColor = textures[in.textureIndex].sample(textureSampler, textureCoordinates);
+    
+    // Sample the alpha portion
+    float4 alphaColor = textures[in.textureIndex].sample(textureSampler, float2(0.5, 0.0) + textureCoordinates);
+    
+    // Sample the mask
+    float4 mask = maskTexture.sample(textureSampler, in.texCoord);
+    
+    // Combine the alpha from both the split texture and the mask
+    textureColor.a = alphaColor.r * mask.r;
+    
+    return textureColor;
+}
+
+// Existing fragment shader with mask
 fragment float4 fragmentShaderWithMask(VertexOut in [[stage_in]],
                                      array<texture2d<float>, 8> textures [[texture(0)]],
                                      texture2d<float> maskTexture [[texture(8)]],
                                      sampler textureSampler [[sampler(0)]]) {
-    // Sample from the content texture
     float4 color = textures[in.textureIndex].sample(textureSampler, in.texCoord);
-    
-    // Sample from the mask texture (using same UV coordinates)
     float4 mask = maskTexture.sample(textureSampler, in.texCoord);
-    
-    // Use the mask's red channel as the alpha mask (assuming grayscale mask)
-    // White (1.0) in mask = fully visible, Black (0.0) = fully transparent
     return float4(color.rgb, color.a * mask.r);
 }

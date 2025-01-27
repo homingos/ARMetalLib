@@ -37,9 +37,10 @@ public class OverlayMetalView: MTKView {
     private var isBufferUpdated: Bool = false
     private var maskMode: MaskMode = .none
     private var maskTexture: MTLTexture?
+    private var videoType: VideoType = .normal
     // for video player output dont replace or add new video output use the existing output
     
-    public init?(frame: CGRect, device: MTLDevice, maskMode: MaskMode) {
+    public init?(frame: CGRect, device: MTLDevice, maskMode: MaskMode, videoType: VideoType = .normal) {
         print("init ARMetalView")
         super.init(frame: frame, device: device)
         self.device = device
@@ -52,6 +53,7 @@ public class OverlayMetalView: MTKView {
         self.backgroundColor = .clear
         self.framebufferOnly = false
         self.maskMode = maskMode
+        self.videoType = videoType
         // true if you want to update the draw call manually using setNeedsDisplay()
         self.enableSetNeedsDisplay = true
         
@@ -177,7 +179,9 @@ public class OverlayMetalView: MTKView {
                         print("Error loading texture: \(error)")
                     }
                 }
-            case .video(_):
+            case .video(_, _, let videoType):
+                self.videoType = videoType
+                print("video type: \(videoType)")
                 if let cache = createTextureCache(device: device){
                     layerValues.textureCache = cache
                 } else { print("Failed to create texture cache") }
@@ -363,12 +367,27 @@ public class OverlayMetalView: MTKView {
         
         do {
             let library = try device.makeDefaultLibrary(bundle: Bundle.module)
-            guard let vertexFunction = library.makeFunction(name: "vertexShader"),
-                  let fragmentFunction = library.makeFunction(name: "fragmentShader") else {
+            guard let vertexFunction = library.makeFunction(name: "vertexShader") else {
                 print("Failed to create shader functions")
                 return
             }
             
+            // Choose the fragment Shader based on the video type
+            var fragmentFunction: MTLFunction?
+            
+            switch self.videoType {
+            case .normal:
+                fragmentFunction = library.makeFunction(name: "fragmentShader")
+            case .alpha(config: let config):
+                switch config {
+                case .LR:
+                    fragmentFunction = library.makeFunction(name: "fragmentShaderSplitTextureLR")
+                case .TD:
+                    fragmentFunction = library.makeFunction(name: "fragmentShaderSplitTextureTD")
+                }
+            }
+            
+            print("fragment shader overlay: \(String(describing: fragmentFunction))")
             let pipelineDescriptor = MTLRenderPipelineDescriptor()
             pipelineDescriptor.label = "Render Pipeline"
             pipelineDescriptor.vertexFunction = vertexFunction
@@ -642,7 +661,7 @@ public class OverlayMetalView: MTKView {
                         indexBufferOffset: 0
                     )
                 }
-            case .video(let playerItemVideoOutput, let avplayer):
+            case .video(let playerItemVideoOutput, let avplayer, let videoType):
                 let time = avplayer.currentTime()
                 if let videoOutput = playerItemVideoOutput, let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil), let textureCache = currentLayer.textureCache {
                     

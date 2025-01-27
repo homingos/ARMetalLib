@@ -48,7 +48,7 @@ public class ARMetalView: MTKView {
     private var projectionMatrix: simd_float4x4?
     
     private var layerImages: [LayerImage] = []
-    private var layerImageDic: [Int: LayerImage] = [:]
+    var layerImageDic: [Int: LayerImage] = [:]
     
     private var stencilState: MTLDepthStencilState?
     private var maskRenderPipelineState: MTLRenderPipelineState!
@@ -666,7 +666,7 @@ public class ARMetalView: MTKView {
                         indexBufferOffset: 0
                     )
                 }
-            case .video(let playerItemVideoOutput, let avplayer):
+            case .video(let playerItemVideoOutput, let avplayer, _):
                 let time = avplayer.currentTime()
                 if let videoOutput = playerItemVideoOutput, let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil), let textureCache = currentLayer.textureCache {
                     

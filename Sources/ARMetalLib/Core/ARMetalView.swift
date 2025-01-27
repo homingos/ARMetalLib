@@ -637,31 +637,36 @@ public class ARMetalView: MTKView {
         // TODO: Update this for supporting multi-Parallax
         updateUniforms(uniformBuffer)
         contentEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
-        let copiedLayerImages = layerImages.map { $0.copy() }
-        let newOffset = viewControllerDelegate?.willUpdateDraw(layerImages: copiedLayerImages)
+//        let copiedLayerImages = layerImages.map { $0.copy() }
+//        let newOffset = viewControllerDelegate?.willUpdateDraw(layerImages: copiedLayerImages)
         var vertexB = vertexBuffers
-        if newOffset == nil {
-            
-        } else {
-            if let newOffset {
-                for i in 0..<vertexB.count {
-                    let existingVertexBuffer = vertexB[i]
-                    let layerIndex = i / 4
-                    let bufferPointer = existingVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
-                    print("before: \(bufferPointer[0].position)")
-                    bufferPointer[0].position += newOffset[layerIndex]
-                    bufferPointer[1].position += newOffset[layerIndex]
-                    bufferPointer[2].position += newOffset[layerIndex]
-                    bufferPointer[3].position += newOffset[layerIndex]
-                    
-                    print("after: \(bufferPointer[0].position)")
-                }
-            }
-        }
+//        if newOffset == nil {
+//            
+//        } else {
+//            if let newOffset {
+//                for i in 0..<vertexB.count {
+//                    let existingVertexBuffer = vertexB[i]
+//                    let layerIndex = i / 4
+//                    let bufferPointer = existingVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
+//                    print("before: \(bufferPointer[0].position)")
+//                    bufferPointer[0].position += newOffset[layerIndex]
+//                    bufferPointer[1].position += newOffset[layerIndex]
+//                    bufferPointer[2].position += newOffset[layerIndex]
+//                    bufferPointer[3].position += newOffset[layerIndex]
+//                    
+//                    print("after: \(bufferPointer[0].position)")
+//                }
+//            }
+//        }
         // Draw each layer
+        print("ss: dict data ")
+        layerImageDic.forEach { key, value in
+            print("ss: \(key) - \(value.videoOutput) \(value.videoPlayerOutput), \(value.modelURL) \(value.content)")
+        }
         for i in 0..<layerImages.count {
             let currentLayer = layerImages[i]
             let contentType = currentLayer.content
+            print("ss: avplayer xxxx \(currentLayer.type) \(currentLayer.avPlayer) \(currentLayer.videoOutput) cc -\(currentLayer.videoPlayerOutput)")
             
             switch contentType {
             case .image(_):
@@ -684,6 +689,7 @@ public class ARMetalView: MTKView {
 
                 guard let videoOutput = playerItemVideoOutput else {
                     print("VideoOutput is nil for layer \(currentLayer.id)")
+                    contentEncoder.endEncoding()
                     return
                 }
                 
@@ -750,6 +756,7 @@ public class ARMetalView: MTKView {
                 
                 guard let videoOutput = currentLayer.videoOutput else {
                     print("VideoOutput is nil for layer \(currentLayer.id)")
+                    contentEncoder.endEncoding()
                     return
                 }
                 
@@ -881,9 +888,9 @@ public class ARMetalView: MTKView {
 
 extension ARMetalView {
     
-    public func setupVideoContent(for layer: LayerImage, with url: URL) {
+    public func setupVideoContent(for layer: LayerImage, with url: URL, avplayer: AVPlayer?) {
         guard let device = self.device else { return }
-        layer.setupVideoContent(with: url, device: device)
+        layer.setupVideoContent(with: url, device: device, avplayer: avplayer)
         
         layer.avPlayer?.play()
     }

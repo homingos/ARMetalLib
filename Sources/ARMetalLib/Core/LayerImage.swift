@@ -15,6 +15,7 @@ public enum ParallaxType: Sendable {
     case Image
     case Video
     case Model3D
+    case VideoV2
 }
 
 public enum ParallaxContent {
@@ -28,7 +29,7 @@ public enum ParallaxContent {
         case .image: return .Image
         case .video: return .Video
         case .model: return .Model3D
-        case .videov2: return .Video
+        case .videov2: return .VideoV2
         }
     }
 }
@@ -152,14 +153,6 @@ public class LayerImage: @unchecked Sendable {
                   scale: scale)
     }
     
-    func copy() -> LayerImage {
-        return LayerImage(id: id,
-                          offset: offset,
-                          content: content,
-                          texture: texture,
-                          scale: scale)
-    }
-    
     public func setVideoPlayerOutput(_ output: AVPlayerItemVideoOutput, player: AVPlayer) {
         if case .video(_, _) = content {
             content = .video(output, player)
@@ -198,40 +191,48 @@ public class LayerImage: @unchecked Sendable {
 
 extension LayerImage {
     
-    public func setupVideoContent(with url: URL, device: MTLDevice) {
-        // Create AVPlayer and AVPlayerItem
-        avPlayer = AVPlayer(url: url)
-        guard let player = avPlayer else { return }
-        let playerItem = player.currentItem
-        
-        // Create texture cache synchronously if needed
+    public func setupVideoContent(with url: URL, device: MTLDevice, avplayer: AVPlayer?) {
+        // Create texture cache synchronously
         if self.textureCache == nil {
             var newTextureCache: CVMetalTextureCache?
-            CVMetalTextureCacheCreate(nil, nil, device, nil, &newTextureCache)
+            let status = CVMetalTextureCacheCreate(nil, nil, device, nil, &newTextureCache)
+            print("ss: texture cache created status: \(status)")
             self.textureCache = newTextureCache
         }
         
-        // Create video output on main thread
+        guard let player = avplayer else {
+            print("Avplayer is coming nil")
+            return
+        }
+        
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
+            guard let strongSelf = self else {
+                print("Self is nil in async block")
+                return
+            }
             
             // Create video output
-            videoOutput = AVPlayerItemVideoOutput(pixelBufferAttributes: [
+            let videoPOutput = AVPlayerItemVideoOutput(pixelBufferAttributes: [
                 kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
                 kCVPixelBufferMetalCompatibilityKey as String: true
             ])
+
+//            if let out = strongSelf.videoOutput {
+//                player.currentItem?.add(out)
+//                print("ss: output added")
+//            }
+            strongSelf.videoOutput = videoPOutput
             
-            if let out = videoOutput {
-                playerItem?.add(out)
-            }
+            player.currentItem?.add(videoPOutput)
             
-            // Update content
-            self.content = .videov2
-            self.isVideoSetup = true
+            strongSelf.avPlayer = player
+            
+            strongSelf.content = .video(videoPOutput, player)
+            strongSelf.isVideoSetup = true
             
             // Set up time observer for frame updates
             let interval = CMTime(seconds: 1.0/30.0, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-            self.timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+            self?.timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
                 self?.updateVideoFrame(at: time)
             }
         }

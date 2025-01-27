@@ -235,6 +235,8 @@ extension LayerImage {
             self?.timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
                 self?.updateVideoFrame(at: time)
             }
+            
+            player.play()
         }
     }
     

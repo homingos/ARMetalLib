@@ -455,32 +455,35 @@ public class ARMetalView: MTKView {
     
     /// Initlize the vertex buffer and index buffer according to LayerImages
     private func setupLayerVertices() {
-        print("111: setupLayerVertices is called")
+        print("Setting up layer vertices")
         isBufferUpdated = false
         
         vertexBuffers.removeAll()
         indexBuffers.removeAll()
         defer {
             isBufferUpdated = true
-            print("111: defer is called")
+            print("Layer vertices setup completed")
         }
         
-        for (index, layer) in layerImages.enumerated() {
-            // Calculate offset based on layer priority
-            let zOffset =  Float(layer.offset.y) * 0.1 // Small z-offset to prevent z-fighting
-            let xOffset =  Float(layer.offset.x) // Small x-offset to prevent z-fighting
-            let yOffset =  Float(layer.offset.z) // Small y-offset to prevent z-fighting
+        // Sort dictionary keys for consistent ordering
+        let sortedKeys = layerImageDic.keys.sorted()
+        
+        for key in sortedKeys {
+            guard let layer = layerImageDic[key] else { continue }
+            
+            let zOffset = Float(layer.offset.y) * 0.1
+            let xOffset = Float(layer.offset.x)
+            let yOffset = Float(layer.offset.z)
             
             let extent = targetExtent ?? CGSize(width: 1.0, height: 1.0)
             let scale = layer.scale
             
             let vertices: [Vertex] = [
-                Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), zOffset, (-0.5 + yOffset) * scale * Float(extent.height)), texCoord: SIMD2<Float>(0.0, 1.0), textureIndex: UInt32(index)),
-                Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), zOffset, (-0.5 + yOffset) * scale * Float(extent.height)) , texCoord: SIMD2<Float>(1.0, 1.0), textureIndex: UInt32(index)),
-                Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), zOffset, (0.5 + yOffset) * scale * Float(extent.height)) , texCoord: SIMD2<Float>(0.0, 0.0), textureIndex: UInt32(index)),
-                Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), zOffset, (0.5 + yOffset) * scale * Float(extent.height)), texCoord: SIMD2<Float>(1.0, 0.0), textureIndex: UInt32(index))
+                Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), zOffset, (-0.5 + yOffset) * scale * Float(extent.height)), texCoord: SIMD2<Float>(0.0, 1.0), textureIndex: UInt32(vertexBuffers.count)),
+                Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), zOffset, (-0.5 + yOffset) * scale * Float(extent.height)), texCoord: SIMD2<Float>(1.0, 1.0), textureIndex: UInt32(vertexBuffers.count)),
+                Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), zOffset, (0.5 + yOffset) * scale * Float(extent.height)), texCoord: SIMD2<Float>(0.0, 0.0), textureIndex: UInt32(vertexBuffers.count)),
+                Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), zOffset, (0.5 + yOffset) * scale * Float(extent.height)), texCoord: SIMD2<Float>(1.0, 0.0), textureIndex: UInt32(vertexBuffers.count))
             ]
-            print("for \(layer.id): offset is : \(vertices)")
             
             let indices: [UInt16] = [
                 0, 1, 2,  // First triangle
@@ -494,6 +497,7 @@ public class ARMetalView: MTKView {
             ) {
                 vertexBuffers.append(vertexBuffer)
             }
+            
             if let indexBuffer = device?.makeBuffer(
                 bytes: indices,
                 length: indices.count * MemoryLayout<UInt16>.stride,
@@ -501,12 +505,11 @@ public class ARMetalView: MTKView {
             ) {
                 indexBuffers.append(indexBuffer)
             }
+            print("Created vertices for layer ID: \(layer.id)")
         }
         
         let uniformBufferSize = MemoryLayout<simd_float4x4>.stride * 3
         uniformBuffer = device?.makeBuffer(length: uniformBufferSize, options: .storageModeShared)
-        print("111: setupLayerVertices is executed")
-        
     }
     
     private func loadTexture(named name: String) -> MTLTexture? {
@@ -578,9 +581,8 @@ public class ARMetalView: MTKView {
     }
     
     public override func draw(_ rect: CGRect) {
-        
         guard let uniformBuffer = uniformBuffer,
-              let maskVertexBuffer,
+              let maskVertexBuffer = maskVertexBuffer,
               let drawable = currentDrawable,
               let commandBuffer = commandQueue?.makeCommandBuffer(),
               let renderPassDescriptor = currentRenderPassDescriptor,
@@ -588,6 +590,7 @@ public class ARMetalView: MTKView {
               let testStencilState = testStencilState else {
             return
         }
+        
         // First pass - render mask to stencil buffer
         renderPassDescriptor.stencilAttachment.clearStencil = 0
         renderPassDescriptor.stencilAttachment.loadAction = .clear
@@ -600,179 +603,93 @@ public class ARMetalView: MTKView {
         guard let maskEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
             return
         }
+        
+        // Mask rendering setup
         maskEncoder.setRenderPipelineState(maskRenderPipelineState)
         maskEncoder.setDepthStencilState(writeStencilState)
         maskEncoder.setStencilReferenceValue(1)
-        //        print("drawing")
-        // Render mask geometry
-        // TODO: Create the buffer only once not every frame
         maskEncoder.setVertexBuffer(maskVertexBuffer, offset: 0, index: 0)
         maskEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
         
-        // Apply the maskImage if present
+        // Apply mask if present
         switch maskMode {
         case .none:
             break
-        case .Image(let uIImage):
+        case .Image:
             maskEncoder.setFragmentTexture(maskTexture, index: 8)
             maskEncoder.setFragmentSamplerState(samplerState, index: 0)
-        case .VideoPlayer(_):
+        case .VideoPlayer:
             break
         }
         
         maskEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         maskEncoder.endEncoding()
         
-        // Second pass - ensure we're keeping the stencil
+        // Second pass setup
         renderPassDescriptor.stencilAttachment.loadAction = .load
         renderPassDescriptor.colorAttachments[0].loadAction = .load
         
-        // Second pass - render content with stencil test
-        let contentEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor)!
+        guard let contentEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+            return
+        }
+        
         contentEncoder.setRenderPipelineState(renderPipelineState)
         contentEncoder.setDepthStencilState(testStencilState)
-        contentEncoder.setStencilReferenceValue(1)  // Must match the value written in the mask pass
+        contentEncoder.setStencilReferenceValue(1)
         contentEncoder.setFragmentSamplerState(samplerState, index: 0)
         
-        // TODO: Update this for supporting multi-Parallax
         updateUniforms(uniformBuffer)
         contentEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
-//        let copiedLayerImages = layerImages.map { $0.copy() }
-//        let newOffset = viewControllerDelegate?.willUpdateDraw(layerImages: copiedLayerImages)
-        var vertexB = vertexBuffers
-//        if newOffset == nil {
-//            
-//        } else {
-//            if let newOffset {
-//                for i in 0..<vertexB.count {
-//                    let existingVertexBuffer = vertexB[i]
-//                    let layerIndex = i / 4
-//                    let bufferPointer = existingVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
-//                    print("before: \(bufferPointer[0].position)")
-//                    bufferPointer[0].position += newOffset[layerIndex]
-//                    bufferPointer[1].position += newOffset[layerIndex]
-//                    bufferPointer[2].position += newOffset[layerIndex]
-//                    bufferPointer[3].position += newOffset[layerIndex]
-//                    
-//                    print("after: \(bufferPointer[0].position)")
-//                }
-//            }
-//        }
-        // Draw each layer
-        print("ss: dict data ")
-        layerImageDic.forEach { key, value in
-            print("ss: \(key) - \(value.videoOutput) \(value.videoPlayerOutput), \(value.modelURL) \(value.content)")
-        }
-        for i in 0..<layerImages.count {
-            let currentLayer = layerImages[i]
-            let contentType = currentLayer.content
-            print("ss: avplayer xxxx \(currentLayer.type) \(currentLayer.avPlayer) \(currentLayer.videoOutput) cc -\(currentLayer.videoPlayerOutput)")
+        
+        // Sort dictionary keys for consistent rendering order
+        let sortedKeys = layerImageDic.keys.sorted()
+        
+        for (index, key) in sortedKeys.enumerated() {
+            guard let currentLayer = layerImageDic[key],
+                  index < vertexBuffers.count,
+                  index < indexBuffers.count else {
+                continue
+            }
             
-            switch contentType {
-            case .image(_):
-                
+            switch currentLayer.content {
+            case .image:
                 if let texture = currentLayer.texture {
-                    contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
-                    contentEncoder.setFragmentTexture(texture, index: i)
+                    contentEncoder.setVertexBuffer(vertexBuffers[index], offset: 0, index: 0)
+                    contentEncoder.setFragmentTexture(texture, index: index)
                     
                     contentEncoder.drawIndexedPrimitives(
                         type: .triangle,
                         indexCount: 6,
                         indexType: .uint16,
-                        indexBuffer: indexBuffers[i],
+                        indexBuffer: indexBuffers[index],
                         indexBufferOffset: 0
                     )
                 }
-            case .video(let playerItemVideoOutput, let avplayer):
-                let avplayer = currentLayer.avPlayer
-                let time = avplayer?.currentTime() ?? CMTimeMake(value: 1, timescale: 1)
-
+                
+            case .video(let playerItemVideoOutput, _):
+                print("Processing video for layer ID: \(key)")
+                let time = currentLayer.avPlayer?.currentTime() ?? CMTime(value: 1, timescale: 1)
+                
                 guard let videoOutput = playerItemVideoOutput else {
-                    print("VideoOutput is nil for layer \(currentLayer.id)")
-                    contentEncoder.endEncoding()
-                    return
+                    print("VideoOutput is nil for layer \(key)")
+                    continue
                 }
                 
                 guard let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) else {
-                    print("Failed to copy pixel buffer at time: \(time.seconds) for layer \(currentLayer.id)")
-                    return
+                    print("Failed to copy pixel buffer at time: \(time.seconds) for layer \(key)")
+                    continue
                 }
                 
                 guard let textureCache = currentLayer.textureCache else {
-                    print("TextureCache is nil for layer \(currentLayer.id)")
-                    return
+                    print("TextureCache is nil for layer \(key)")
+                    continue
                 }
+                print("pop: ")
                 
-                if let videoOutput = playerItemVideoOutput, let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil), let textureCache = currentLayer.textureCache {
-                    
-                    var cvTexture: CVMetalTexture?
-                    let width = CVPixelBufferGetWidth(pixelBuffer)
-                    let height = CVPixelBufferGetHeight(pixelBuffer)
-                    let status = CVMetalTextureCacheCreateTextureFromImage(
-                        nil,
-                        textureCache,
-                        pixelBuffer,
-                        nil,
-                        .bgra8Unorm,
-                        width,
-                        height,
-                        0,
-                        &cvTexture
-                    )
-
-                    if status != kCVReturnSuccess {
-                        print("Failed to create texture from image with status: \(status)")
-                        return
-                    }
-                    
-                    guard let texture = cvTexture,
-                          let metalTexture = CVMetalTextureGetTexture(texture) else {
-                        print("Failed to get Metal texture")
-                        return
-                    }
-                    
-                    if let texture = cvTexture {
-                        let metalTexture = CVMetalTextureGetTexture(texture)
-                        contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
-                        contentEncoder.setFragmentTexture(metalTexture, index: i)
-                        
-                        contentEncoder.drawIndexedPrimitives(
-                            type: .triangle,
-                            indexCount: 6,
-                            indexType: .uint16,
-                            indexBuffer: indexBuffers[i],
-                            indexBufferOffset: 0
-                        )
-                    }
-                } else {
-                    print("things ar enot valid")
-                }
-            case .model(let uRL): break
-                // TODO: For 3d objects
-                
-            case .videov2:
-                let avplayer = currentLayer.avPlayer
-                let time = avplayer?.currentTime() ?? CMTimeMake(value: 1, timescale: 1)
-                
-                guard let videoOutput = currentLayer.videoOutput else {
-                    print("VideoOutput is nil for layer \(currentLayer.id)")
-                    contentEncoder.endEncoding()
-                    return
-                }
-                
-                guard let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) else {
-                    print("Failed to copy pixel buffer at time: \(time.seconds) for layer \(currentLayer.id)")
-                    return
-                }
-                
-                guard let textureCache = currentLayer.textureCache else {
-                    print("TextureCache is nil for layer \(currentLayer.id)")
-                    return
-                }
-                    
                 var cvTexture: CVMetalTexture?
                 let width = CVPixelBufferGetWidth(pixelBuffer)
                 let height = CVPixelBufferGetHeight(pixelBuffer)
+                
                 let status = CVMetalTextureCacheCreateTextureFromImage(
                     nil,
                     textureCache,
@@ -787,30 +704,80 @@ public class ARMetalView: MTKView {
                 
                 if status != kCVReturnSuccess {
                     print("Failed to create texture from image with status: \(status)")
-                    return
+                    continue
                 }
                 
-                guard let texture = cvTexture,
-                      let metalTexture = CVMetalTextureGetTexture(texture) else {
-                    print("Failed to get Metal texture")
-                    return
-                }
-                
-                if let texture = cvTexture {
-                    let metalTexture = CVMetalTextureGetTexture(texture)
-                    contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
-                    contentEncoder.setFragmentTexture(metalTexture, index: i)
+                if let texture = cvTexture,
+                   let metalTexture = CVMetalTextureGetTexture(texture) {
+                    contentEncoder.setVertexBuffer(vertexBuffers[index], offset: 0, index: 0)
+                    contentEncoder.setFragmentTexture(metalTexture, index: index)
                     
                     contentEncoder.drawIndexedPrimitives(
                         type: .triangle,
                         indexCount: 6,
                         indexType: .uint16,
-                        indexBuffer: indexBuffers[i],
+                        indexBuffer: indexBuffers[index],
                         indexBufferOffset: 0
                     )
                 }
                 
+            case .model:
+                // Handle 3D model case if needed
                 break
+                
+            case .videov2:
+                print("Processing videov2 for layer ID: \(key)")
+                let time = currentLayer.avPlayer?.currentTime() ?? CMTime(value: 1, timescale: 1)
+                
+                guard let videoOutput = currentLayer.videoOutput else {
+                    print("VideoOutput is nil for layer \(key)")
+                    continue
+                }
+                
+                guard let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) else {
+                    print("Failed to copy pixel buffer at time: \(time.seconds) for layer \(key)")
+                    continue
+                }
+                
+                guard let textureCache = currentLayer.textureCache else {
+                    print("TextureCache is nil for layer \(key)")
+                    continue
+                }
+                
+                var cvTexture: CVMetalTexture?
+                let width = CVPixelBufferGetWidth(pixelBuffer)
+                let height = CVPixelBufferGetHeight(pixelBuffer)
+                
+                let status = CVMetalTextureCacheCreateTextureFromImage(
+                    nil,
+                    textureCache,
+                    pixelBuffer,
+                    nil,
+                    .bgra8Unorm,
+                    width,
+                    height,
+                    0,
+                    &cvTexture
+                )
+                
+                if status != kCVReturnSuccess {
+                    print("Failed to create texture from image with status: \(status)")
+                    continue
+                }
+                
+                if let texture = cvTexture,
+                   let metalTexture = CVMetalTextureGetTexture(texture) {
+                    contentEncoder.setVertexBuffer(vertexBuffers[index], offset: 0, index: 0)
+                    contentEncoder.setFragmentTexture(metalTexture, index: index)
+                    
+                    contentEncoder.drawIndexedPrimitives(
+                        type: .triangle,
+                        indexCount: 6,
+                        indexType: .uint16,
+                        indexBuffer: indexBuffers[index],
+                        indexBufferOffset: 0
+                    )
+                }
             }
         }
         

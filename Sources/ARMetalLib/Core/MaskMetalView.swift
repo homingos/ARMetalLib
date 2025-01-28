@@ -9,7 +9,7 @@ import Foundation
 import MetalKit
 import AVFoundation
 
-public class OverlayMetalView: MTKView {
+public class MaskMetalView: MTKView {
     private var commandQueue: MTLCommandQueue!
     private var renderPipelineState: MTLRenderPipelineState!
     private var vertexBuffers: [MTLBuffer] = []
@@ -22,8 +22,8 @@ public class OverlayMetalView: MTKView {
     private var cameraTransform: simd_float4x4?
     private var projectionMatrix: simd_float4x4?
     
-    private var layerImages: [OverlayLayer] = []
-    private var layerImageDic: [Int: OverlayLayer] = [:]
+    private var layerImages: [MaskLayer] = []
+    private var layerImageDic: [Int: MaskLayer] = [:]
     
     private var stencilState: MTLDepthStencilState?
     private var maskRenderPipelineState: MTLRenderPipelineState!
@@ -79,7 +79,7 @@ public class OverlayMetalView: MTKView {
     }
     
     /// Use for updating and setting the LayerImage
-    public func updateLayerImage(layerImage: [Int: OverlayLayer]){
+    public func updateLayerImage(layerImage: [Int: MaskLayer]){
         self.layerImageDic = layerImage
         print("Recieved Overlay layerImage: \(layerImage)")
         setLayerImage(layerImage: layerImage)
@@ -136,7 +136,7 @@ public class OverlayMetalView: MTKView {
         }
     }
     
-    private func setLayerImage(layerImage: [Int: OverlayLayer]){
+    private func setLayerImage(layerImage: [Int: MaskLayer]){
         guard let device else { return }
         
         let textureLoader = MTKTextureLoader(device: device)

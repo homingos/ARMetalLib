@@ -20,7 +20,7 @@ public enum VideoType{
 
 /// class for holding Parallax Layer images data
 /// Used in Metal AR
-public final class OverlayLayer: @unchecked Sendable {
+public final class MaskLayer: @unchecked Sendable {
     let id: Int
     var textureCache: CVMetalTextureCache?
     let offset: SIMD3<Float>

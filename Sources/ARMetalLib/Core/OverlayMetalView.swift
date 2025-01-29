@@ -188,6 +188,8 @@ public class OverlayMetalView: MTKView {
 //                CVMetalTextureCacheCreate(nil, nil, device,nil, &layerValues.textureCache)
             case .model(_):
                 break
+            case .videov2:
+                break
             }
             layerImages.append(layerValues)
         }
@@ -697,6 +699,8 @@ public class OverlayMetalView: MTKView {
                 }
             case .model(let uRL):
                 // TODO: For 3d objects
+                break
+            case .videov2:
                 break
             }
         }

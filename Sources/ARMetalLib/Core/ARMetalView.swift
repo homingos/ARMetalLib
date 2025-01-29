@@ -35,7 +35,7 @@ public enum MaskMode{
 }
 
 public class ARMetalView: MTKView {
-    private var commandQueue: MTLCommandQueue!
+    internal var commandQueue: MTLCommandQueue!
     private var renderPipelineState: MTLRenderPipelineState!
     private var vertexBuffers: [MTLBuffer] = []
     private var indexBuffers: [MTLBuffer] = []
@@ -63,6 +63,9 @@ public class ARMetalView: MTKView {
     private var maskMode: MaskMode = .none
     private var maskTexture: MTLTexture?
     // for video player output dont replace or add new video output use the existing output
+    
+    internal static var colorPickerResources: ColorPickerResources?
+    internal var targetTexture: MTLTexture?
     
     public init?(frame: CGRect, device: MTLDevice, viewControllerDelegate: ARMetalViewDelegate, maskMode: MaskMode) {
         print("init ARMetalView")

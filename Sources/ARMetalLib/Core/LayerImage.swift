@@ -20,7 +20,7 @@ public enum ParallaxType: Sendable {
 
 public enum ParallaxContent {
     case image(UIImage)
-    case video(AVPlayerItemVideoOutput?, AVPlayer)
+    case video(AVPlayerItemVideoOutput?, AVPlayer, VideoType)
     case model(URL)  // URL to your 3D model file
     case videov2
     
@@ -99,7 +99,7 @@ public class LayerImage: @unchecked Sendable {
     
     // Convenience accessor for video content
     var videoPlayerOutput: (AVPlayerItemVideoOutput?, AVPlayer?) {
-        if case .video(let playerVideoOutput, let avplayer) = content {
+        if case .video(let playerVideoOutput, let avplayer, let videoType) = content {
             return (playerVideoOutput, avplayer)
         }
         return (nil, nil)
@@ -145,17 +145,17 @@ public class LayerImage: @unchecked Sendable {
                             videoPlayerOutput: AVPlayerItemVideoOutput?,
                             avplayer: AVPlayer,
                             texture: MTLTexture? = nil,
-                            scale: Float = 1.0) {
+                            scale: Float = 1.0, videoType: VideoType) {
         self.init(id: id,
                   offset: offset,
-                  content: .video(videoPlayerOutput, avplayer),
+                  content: .video(videoPlayerOutput, avplayer, videoType),
                   texture: texture,
                   scale: scale)
     }
     
     public func setVideoPlayerOutput(_ output: AVPlayerItemVideoOutput, player: AVPlayer) {
-        if case .video(_, _) = content {
-            content = .video(output, player)
+        if case .video(_, _, _) = content {
+            content = .video(output, player, .normal)
             print("content set to \(content)")
         } else {
             print("Warning: Cannot set video output - content is not of type video")

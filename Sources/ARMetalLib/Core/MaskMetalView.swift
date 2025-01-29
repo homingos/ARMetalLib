@@ -90,10 +90,10 @@ public class MaskMetalView: MTKView {
 //    }
     
     /// Updated the Extent of the rendering Plane
-    public func setTargetSize(targetSize: CGSize){
+    public func setTargetSize(targetSize: CGSize, maskTargetSize: CGSize){
         targetExtent = targetSize
         updateVertexBuffer(newExtent: targetSize)
-        updateMaskVertices(maskVertexBuffer)
+        updateMaskVertices(maskVertexBuffer, maskTargetSize: maskTargetSize)
     }
     
     private func updateVertexBuffer(newExtent: CGSize) {
@@ -717,9 +717,9 @@ public class MaskMetalView: MTKView {
         ]
     }
     
-    private func updateMaskVertices(_ buffer: MTLBuffer) {
+    private func updateMaskVertices(_ buffer: MTLBuffer, maskTargetSize: CGSize?) {
         let bufferPointer = buffer.contents().assumingMemoryBound(to: Vertex.self)
-        let newExtent = targetExtent ?? CGSize(width: 1.0, height: 1.0)
+        let newExtent = maskTargetSize ?? CGSize(width: 1.0, height: 1.0)
         let point: Float = 0.5
         
         // Update x and z components (width and height) of each vertex

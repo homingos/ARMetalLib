@@ -33,6 +33,7 @@ public class MaskMetalView: MTKView {
     
 //    weak var viewControllerDelegate: ARMetalViewDelegate?
     private var targetExtent: CGSize?
+    private var maskOffset: SIMD3<Float> = .zero
     
     private var isBufferUpdated: Bool = false
     private var maskMode: MaskMode = .none
@@ -70,8 +71,9 @@ public class MaskMetalView: MTKView {
         switch maskMode {
         case .none:
             break
-        case .Image(let image):
+        case .Image(let image, let offset):
             updateMaskImage(image)
+            maskOffset = offset
         case .VideoPlayer(let videoOutput):
             // TODO: Mask as a video
             break

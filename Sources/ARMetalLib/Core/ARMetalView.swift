@@ -22,7 +22,7 @@ enum MaskType{
 }
 public enum MaskMode{
     case none
-    case Image(UIImage)
+    case Image(UIImage, SIMD3<Float>)
     case VideoPlayer(AVPlayerItemVideoOutput)
     
     var contentType: MaskType {
@@ -93,7 +93,7 @@ public class ARMetalView: MTKView {
         switch maskMode {
         case .none:
             break
-        case .Image(let image):
+        case .Image(let image, let offset ):
             updateMaskImage(image)
         case .VideoPlayer(let videoOutput):
             // TODO: Mask as a video

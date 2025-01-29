@@ -138,7 +138,7 @@ public class MaskMetalView: MTKView {
     
     private func setLayerImage(layerImage: [Int: MaskLayer]){
         guard let device else { return }
-        
+        layerImages.removeAll()
         let textureLoader = MTKTextureLoader(device: device)
         let textureOptions: [MTKTextureLoader.Option: Any] = [
             .generateMipmaps: true,                     // Enable mipmapping

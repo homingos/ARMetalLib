@@ -605,9 +605,9 @@ public class MaskMetalView: MTKView {
         case .none:
             break
         case .Image(let uIImage, let offset):
-//            let maskVB = prepareDrawBuffer(offset: .zero)
+            let maskVB = prepareDrawBuffer(offset: offset)
             
-            maskEncoder.setVertexBuffer(maskVertexBuffer, offset: 0, index: 0)
+            maskEncoder.setVertexBuffer(maskVB, offset: 0, index: 0)
             maskEncoder.setFragmentTexture(maskTexture, index: 8)
             maskEncoder.setFragmentSamplerState(samplerState, index: 0)
         case .VideoPlayer(_):
@@ -768,7 +768,7 @@ public class MaskMetalView: MTKView {
         print("Mask vertices updated: \(bufferPointer[0].position)")
     }
     
-    private func prepareDrawBuffer(offset: CGPoint) -> MTLBuffer? {
+    private func prepareDrawBuffer(offset: SIMD3<Float>) -> MTLBuffer? {
         // Create draw buffer if needed
         guard let device, let maskVertexBuffer else { return nil}
         if drawBufferMaskOffset == nil {
@@ -782,18 +782,13 @@ public class MaskMetalView: MTKView {
         let sourcePointer = maskVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
         let destPointer = drawBufferMaskOffset!.contents().assumingMemoryBound(to: Vertex.self)
         
-        // Create offset vector
-        if (offset.x == 0 && offset.y == 0) { return drawBufferMaskOffset! }
-        let offsetVector = SIMD3<Float>(Float(offset.x), 0, Float(offset.y))
-        
         // Copy vertices with offset
         for i in 0..<4 {
             // Copy original vertex
             destPointer[i] = sourcePointer[i]
             // Apply offset only to position
-            destPointer[i].position += offsetVector
+            destPointer[i].position += offset
         }
-        
         return drawBufferMaskOffset!
     }
     

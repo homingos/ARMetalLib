@@ -49,6 +49,10 @@ public class MaskMetalView: MTKView {
     private var imageTrackingStatus: TrackingStatus = .notRecoganized
     private var drawBufferMaskOffset: MTLBuffer?
     
+    // MARK: static image that is not affected by the mask stencil
+    private var staticRectPipelineState: MTLRenderPipelineState!
+    private var staticRectVertexBuffer: MTLBuffer!
+    
     public init?(frame: CGRect, device: MTLDevice, maskMode: MaskMode, videoType: VideoType = .normal) {
         print("init ARMetalView")
         super.init(frame: frame, device: device)
@@ -68,11 +72,86 @@ public class MaskMetalView: MTKView {
         
         setupMetal()
         setupMaskConfiguration(maskMode: maskMode)
+        setupStaticRectangle()
 //        self.viewControllerDelegate = viewControllerDelegate
         //        setupDefaultVertices()
     }
     required init(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+    
+    private struct StaticRectVertex {
+        var position: SIMD3<Float>
+        var texCoord: SIMD2<Float>
+    }
+    
+    private func setupStaticRectangle() {
+        // Create vertices for the static rectangle
+        let vertices: [StaticRectVertex] = [
+            StaticRectVertex(position: SIMD3<Float>(-1.0, 1.0, 0.0), texCoord: SIMD2<Float>(0.0, 1.0)),    // Top-left
+            StaticRectVertex(position: SIMD3<Float>(0.0, 1.0, 0.0), texCoord: SIMD2<Float>(1.0, 1.0)),     // Top-right
+            StaticRectVertex(position: SIMD3<Float>(-1.0, 0.0, 0.0), texCoord: SIMD2<Float>(0.0, 0.0)),    // Bottom-left
+            StaticRectVertex(position: SIMD3<Float>(0.0, 0.0, 0.0), texCoord: SIMD2<Float>(1.0, 0.0))      // Bottom-right
+        ]
+        
+        staticRectVertexBuffer = device?.makeBuffer(
+            bytes: vertices,
+            length: vertices.count * MemoryLayout<StaticRectVertex>.stride,
+            options: .storageModeShared
+        )
+        
+        createStaticRectPipeline()
+    }
+
+    private func createStaticRectPipeline() {
+        guard let device = self.device else { return }
+        
+        do {
+            let library = try device.makeDefaultLibrary(bundle: Bundle.module)
+            guard let vertexFunction = library.makeFunction(name: "staticRectVertexShader"),
+                  let fragmentFunction = library.makeFunction(name: "staticRectFragmentShader") else {
+                return
+            }
+            
+            let pipelineDescriptor = MTLRenderPipelineDescriptor()
+            pipelineDescriptor.label = "Static Rectangle Pipeline"
+            pipelineDescriptor.vertexFunction = vertexFunction
+            pipelineDescriptor.fragmentFunction = fragmentFunction
+            
+            // Configure vertex descriptor for static rectangle
+            let vertexDescriptor = MTLVertexDescriptor()
+            
+            // Position attribute
+            vertexDescriptor.attributes[0].format = .float3
+            vertexDescriptor.attributes[0].offset = 0
+            vertexDescriptor.attributes[0].bufferIndex = 0
+            
+            // Texture coordinate attribute
+            vertexDescriptor.attributes[1].format = .float2
+            vertexDescriptor.attributes[1].offset = MemoryLayout<SIMD3<Float>>.stride
+            vertexDescriptor.attributes[1].bufferIndex = 0
+            
+            // Buffer layout
+            vertexDescriptor.layouts[0].stride = MemoryLayout<StaticRectVertex>.stride
+            
+            pipelineDescriptor.vertexDescriptor = vertexDescriptor
+            
+            // Configure color attachment
+            let colorAttachment = pipelineDescriptor.colorAttachments[0]
+            colorAttachment?.pixelFormat = self.colorPixelFormat
+            colorAttachment?.isBlendingEnabled = true
+            colorAttachment?.sourceRGBBlendFactor = .sourceAlpha
+            colorAttachment?.sourceAlphaBlendFactor = .sourceAlpha
+            colorAttachment?.destinationRGBBlendFactor = .oneMinusSourceAlpha
+            colorAttachment?.destinationAlphaBlendFactor = .oneMinusSourceAlpha
+            
+            pipelineDescriptor.depthAttachmentPixelFormat = .depth32Float_stencil8
+            pipelineDescriptor.stencilAttachmentPixelFormat = .depth32Float_stencil8
+            
+            staticRectPipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+        } catch {
+            print("Failed to create static rectangle pipeline: \(error)")
+        }
     }
     
     private func setupMaskConfiguration(maskMode: MaskMode){
@@ -145,6 +224,83 @@ public class MaskMetalView: MTKView {
             }
         }
     }
+    private func loadTextureFromImage(_ image: UIImage, device: MTLDevice) -> MTLTexture? {
+        // Ensure we have a valid CGImage
+        guard let cgImage = image.cgImage else {
+            print("Failed to get CGImage from UIImage")
+            return nil
+        }
+        
+        // Create a texture loader
+        let textureLoader = MTKTextureLoader(device: device)
+        
+        // Configure texture loading options
+        let textureOptions: [MTKTextureLoader.Option: Any] = [
+            .SRGB: false,
+            .generateMipmaps: true,
+            .textureUsage: MTLTextureUsage([.shaderRead, .renderTarget]).rawValue
+        ]
+        
+        do {
+            // First try direct loading
+            return try textureLoader.newTexture(cgImage: cgImage, options: textureOptions)
+        } catch {
+            print("Direct texture loading failed, attempting manual conversion...")
+            
+            // Manual texture creation as fallback
+            let colorSpace = CGColorSpaceCreateDeviceRGB()
+            let width = cgImage.width
+            let height = cgImage.height
+            let bytesPerPixel = 4
+            let bitsPerComponent = 8
+            let bytesPerRow = bytesPerPixel * width
+            let rawData = UnsafeMutablePointer<UInt8>.allocate(capacity: width * height * bytesPerPixel)
+            
+            guard let context = CGContext(data: rawData,
+                                        width: width,
+                                        height: height,
+                                        bitsPerComponent: bitsPerComponent,
+                                        bytesPerRow: bytesPerRow,
+                                        space: colorSpace,
+                                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+                print("Failed to create CGContext")
+                rawData.deallocate()
+                return nil
+            }
+            
+            // Draw the image into the context
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+            
+            // Create texture descriptor
+            let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .rgba8Unorm,
+                width: width,
+                height: height,
+                mipmapped: true
+            )
+            textureDescriptor.usage = [.shaderRead, .renderTarget]
+            textureDescriptor.storageMode = .shared
+            
+            // Create texture
+            guard let texture = device.makeTexture(descriptor: textureDescriptor) else {
+                print("Failed to create texture")
+                rawData.deallocate()
+                return nil
+            }
+            
+            // Copy data to texture
+            let region = MTLRegionMake2D(0, 0, width, height)
+            texture.replace(region: region,
+                           mipmapLevel: 0,
+                           withBytes: rawData,
+                           bytesPerRow: bytesPerRow)
+            
+            // Clean up
+            rawData.deallocate()
+            
+            return texture
+        }
+    }
     
     private func setLayerImage(layerImage: [Int: MaskLayer]){
         guard let device else { return }
@@ -167,28 +323,14 @@ public class MaskMetalView: MTKView {
             switch layerValues.content{
                 
             case .image(_):
-                if let image = layerValues.image, let cgImage = image.cgImage {
-                    do {
-                        // Create texture descriptor for high quality
-                        let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
-                            pixelFormat: .rgba8Unorm,
-                            width: cgImage.width,
-                            height: cgImage.height,
-                            mipmapped: true
-                        )
-                        textureDescriptor.usage = [.shaderRead, .renderTarget]
-                        textureDescriptor.storageMode = .private
-                        textureDescriptor.sampleCount = 1
-                        
-                        layerValues.texture = try textureLoader.newTexture(
-                            cgImage: cgImage,
-                            options: textureOptions
-                        )
-                        //                    print("Layer texture loaded with high quality settings")
-                    } catch {
-                        print("Error loading texture: \(error)")
+                if let image = layerValues.image {
+                        if let texture = loadTextureFromImage(image, device: device) {
+                            layerValues.texture = texture
+                            print("Layer texture loaded successfully")
+                        } else {
+                            print("Failed to load texture for layer \(layerValues.id)")
+                        }
                     }
-                }
             case .video(_, _, let videoType):
                 self.videoType = videoType
                 print("video type: \(videoType)")
@@ -692,19 +834,9 @@ public class MaskMetalView: MTKView {
                         &cvTexture
                     )
                     
+                    // add the vertex logic to restrict the vertex
                     if imageTrackingStatus == .trackingLost {
-                        for i in 0..<vertexB.count {
-                            let existingVertexBuffer = vertexB[i]
-                            let layerIndex = i / 4
-                            let bufferPointer = existingVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
-//                            print("before: \(bufferPointer[0].position)")
-                            bufferPointer[0].position = SIMD3(-0.5, -0.5, 0.0)
-                            bufferPointer[1].position = SIMD3(0.5, -0.5, 0.0)
-                            bufferPointer[2].position = SIMD3(-0.5, 0.5, 0.0)
-                            bufferPointer[3].position = SIMD3(0.5, 0.5, 0.0)
-//
-//                            print("after: \(bufferPointer[0].position)")
-                        }
+
                     }
                     if let texture = cvTexture {
                         let metalTexture = CVMetalTextureGetTexture(texture)
@@ -729,6 +861,27 @@ public class MaskMetalView: MTKView {
         }
         
         contentEncoder.endEncoding()
+        
+        // Final pass - render static rectangle
+        renderPassDescriptor.colorAttachments[0].loadAction = .load
+        guard let rectEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+            return
+        }
+        
+        // Find the first layer with useStencil = false
+        if let nonStencilLayer = layerImages.first(where: { !$0.useStencil }) {
+            rectEncoder.setRenderPipelineState(staticRectPipelineState)
+            rectEncoder.setVertexBuffer(staticRectVertexBuffer, offset: 0, index: 0)
+            
+            // Set the texture from the non-stencil layer
+            if let texture = nonStencilLayer.texture {
+                rectEncoder.setFragmentTexture(texture, index: 0)
+                rectEncoder.setFragmentSamplerState(samplerState, index: 0)
+                rectEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            }
+        }
+        rectEncoder.endEncoding()
+        
         commandBuffer.present(drawable)
         commandBuffer.commit()
     }

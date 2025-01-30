@@ -135,27 +135,27 @@ public class ARMetalView: MTKView {
                 let vertexBuffer = vertexBuffers[index]
                 let bufferPointer = vertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
                 
-                let zOffset = Float(layer.offset.y) * 0.5
+                let zOffset = Float(layer.offset.z) * 0.5
                 let xOffset = Float(layer.offset.x)
-                let yOffset = Float(layer.offset.z)
+                let yOffset = Float(layer.offset.y)
                 let scale = layer.scale
                 
                 // Update x and z components (width and height) of each vertex
                 // Vertex 0
                 bufferPointer[0].position.x = (-0.5 + xOffset) * scale * Float(newExtent.width)
-                bufferPointer[0].position.z = (-0.5 + yOffset) * scale * Float(newExtent.height)
+                bufferPointer[0].position.y = (-0.5 + yOffset) * scale * Float(newExtent.height)
                 
                 // Vertex 1
                 bufferPointer[1].position.x = (0.5 + xOffset) * scale * Float(newExtent.width)
-                bufferPointer[1].position.z = (-0.5 + yOffset) * scale * Float(newExtent.height)
+                bufferPointer[1].position.y = (-0.5 + yOffset) * scale * Float(newExtent.height)
                 
                 // Vertex 2
                 bufferPointer[2].position.x = (-0.5 + xOffset) * scale * Float(newExtent.width)
-                bufferPointer[2].position.z = (0.5 + yOffset) * scale * Float(newExtent.height)
+                bufferPointer[2].position.y = (0.5 + yOffset) * scale * Float(newExtent.height)
                 
                 // Vertex 3
                 bufferPointer[3].position.x = (0.5 + xOffset) * scale * Float(newExtent.width)
-                bufferPointer[3].position.z = (0.5 + yOffset) * scale * Float(newExtent.height)
+                bufferPointer[3].position.y = (0.5 + yOffset) * scale * Float(newExtent.height)
                 
                 print("Updated vertices for layer \(layer.id): \(bufferPointer[0].position)")
             }
@@ -458,18 +458,18 @@ public class ARMetalView: MTKView {
         
         for (index, layer) in layerImages.enumerated() {
             // Calculate offset based on layer priority
-            let zOffset =  Float(layer.offset.y) * 0.1 // Small z-offset to prevent z-fighting
+            let zOffset =  Float(layer.offset.z) * 0.1 // Small z-offset to prevent z-fighting
             let xOffset =  Float(layer.offset.x) // Small x-offset to prevent z-fighting
-            let yOffset =  Float(layer.offset.z) // Small y-offset to prevent z-fighting
+            let yOffset =  Float(layer.offset.y) // Small y-offset to prevent z-fighting
             
             let extent = targetExtent ?? CGSize(width: 1.0, height: 1.0)
             let scale = layer.scale
             
             let vertices: [Vertex] = [
-                Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), zOffset, (-0.5 + yOffset) * scale * Float(extent.height)), texCoord: SIMD2<Float>(0.0, 1.0), textureIndex: UInt32(index)),
-                Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), zOffset, (-0.5 + yOffset) * scale * Float(extent.height)) , texCoord: SIMD2<Float>(1.0, 1.0), textureIndex: UInt32(index)),
-                Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), zOffset, (0.5 + yOffset) * scale * Float(extent.height)) , texCoord: SIMD2<Float>(0.0, 0.0), textureIndex: UInt32(index)),
-                Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), zOffset, (0.5 + yOffset) * scale * Float(extent.height)), texCoord: SIMD2<Float>(1.0, 0.0), textureIndex: UInt32(index))
+                Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), (-0.5 + yOffset) * scale * Float(extent.height), zOffset), texCoord: SIMD2<Float>(0.0, 1.0), textureIndex: UInt32(index)),
+                Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), (-0.5 + yOffset) * scale * Float(extent.height), zOffset) , texCoord: SIMD2<Float>(1.0, 1.0), textureIndex: UInt32(index)),
+                Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), zOffset) , texCoord: SIMD2<Float>(0.0, 0.0), textureIndex: UInt32(index)),
+                Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), zOffset), texCoord: SIMD2<Float>(1.0, 0.0), textureIndex: UInt32(index))
             ]
             print("for \(layer.id): offset is : \(vertices)")
             
@@ -718,10 +718,10 @@ public class ARMetalView: MTKView {
         let extent = targetExtent ?? CGSize(width: 1.0, height: 1.0)
         let point: Float = 0.5 // Adjust this value to change the size of the mask
         return [
-            Vertex(position: SIMD3<Float>(-point * Float(extent.width), 0, -point * Float(extent.height)), texCoord: SIMD2<Float>(0, 1), textureIndex: 0),
-            Vertex(position: SIMD3<Float>(point * Float(extent.width),0, -point * Float(extent.height)), texCoord: SIMD2<Float>(1, 1), textureIndex: 0),
-            Vertex(position: SIMD3<Float>(-point * Float(extent.width), 0, point * Float(extent.height)), texCoord: SIMD2<Float>(0, 0), textureIndex: 0),
-            Vertex(position: SIMD3<Float>(point * Float(extent.width), 0, point * Float(extent.height)), texCoord: SIMD2<Float>(1, 0), textureIndex: 0)
+            Vertex(position: SIMD3<Float>(-point * Float(extent.width), -point * Float(extent.height), 0), texCoord: SIMD2<Float>(0, 1), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(point * Float(extent.width), -point * Float(extent.height), 0), texCoord: SIMD2<Float>(1, 1), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(-point * Float(extent.width), point * Float(extent.height), 0), texCoord: SIMD2<Float>(0, 0), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(point * Float(extent.width), point * Float(extent.height), 0), texCoord: SIMD2<Float>(1, 0), textureIndex: 0)
         ]
     }
     
@@ -733,19 +733,19 @@ public class ARMetalView: MTKView {
         // Update x and z components (width and height) of each vertex
         // Vertex 0
         bufferPointer[0].position.x = (-point) * Float(newExtent.width)
-        bufferPointer[0].position.z = (-point) * Float(newExtent.height)
+        bufferPointer[0].position.y = (-point) * Float(newExtent.height)
         
         // Vertex 1
         bufferPointer[1].position.x = (point) * Float(newExtent.width)
-        bufferPointer[1].position.z = (-point) * Float(newExtent.height)
+        bufferPointer[1].position.y = (-point) * Float(newExtent.height)
         
         // Vertex 2
         bufferPointer[2].position.x = (-point) * Float(newExtent.width)
-        bufferPointer[2].position.z = (point) * Float(newExtent.height)
+        bufferPointer[2].position.y = (point) * Float(newExtent.height)
         
         // Vertex 3
         bufferPointer[3].position.x = (point) * Float(newExtent.width)
-        bufferPointer[3].position.z = (point) * Float(newExtent.height)
+        bufferPointer[3].position.y = (point) * Float(newExtent.height)
         print("Mask vertices updated: \(bufferPointer[0].position)")
     }
     

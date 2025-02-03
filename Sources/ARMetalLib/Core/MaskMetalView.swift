@@ -88,10 +88,10 @@ public class MaskMetalView: MTKView {
     private func setupStaticRectangle() {
         // Create vertices for the static rectangle
         let vertices: [StaticRectVertex] = [
-            StaticRectVertex(position: SIMD3<Float>(-1.0, 1.0, 0.0), texCoord: SIMD2<Float>(0.0, 1.0)),    // Top-left
-            StaticRectVertex(position: SIMD3<Float>(0.0, 1.0, 0.0), texCoord: SIMD2<Float>(1.0, 1.0)),     // Top-right
-            StaticRectVertex(position: SIMD3<Float>(-1.0, 0.0, 0.0), texCoord: SIMD2<Float>(0.0, 0.0)),    // Bottom-left
-            StaticRectVertex(position: SIMD3<Float>(0.0, 0.0, 0.0), texCoord: SIMD2<Float>(1.0, 0.0))      // Bottom-right
+            StaticRectVertex(position: SIMD3<Float>(-0.5, 0.5, 0.0), texCoord: SIMD2<Float>(0.0, 1.0)),    // Top-left
+            StaticRectVertex(position: SIMD3<Float>(0.5, 0.5, 0.0), texCoord: SIMD2<Float>(1.0, 1.0)),     // Top-right
+            StaticRectVertex(position: SIMD3<Float>(-0.5, -0.5, 0.0), texCoord: SIMD2<Float>(0.0, 0.0)),    // Bottom-left
+            StaticRectVertex(position: SIMD3<Float>(0.5, -0.5, 0.0), texCoord: SIMD2<Float>(1.0, 0.0))      // Bottom-right
         ]
         
         staticRectVertexBuffer = device?.makeBuffer(
@@ -763,6 +763,27 @@ public class MaskMetalView: MTKView {
         renderPassDescriptor.stencilAttachment.loadAction = .load
         renderPassDescriptor.colorAttachments[0].loadAction = .load
         
+        
+        // Final pass - render static rectangle
+        renderPassDescriptor.colorAttachments[0].loadAction = .load
+        guard let rectEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+            return
+        }
+        
+        // Find the first layer with useStencil = false
+        if let nonStencilLayer = layerImages.first(where: { !$0.useStencil }) {
+            rectEncoder.setRenderPipelineState(staticRectPipelineState)
+            rectEncoder.setVertexBuffer(staticRectVertexBuffer, offset: 0, index: 0)
+            
+            // Set the texture from the non-stencil layer
+            if let texture = nonStencilLayer.texture {
+                rectEncoder.setFragmentTexture(texture, index: 0)
+                rectEncoder.setFragmentSamplerState(samplerState, index: 0)
+                rectEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            }
+        }
+        rectEncoder.endEncoding()
+        
         // Second pass - render content with stencil test
         let contentEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor)!
         contentEncoder.setRenderPipelineState(renderPipelineState)
@@ -799,7 +820,7 @@ public class MaskMetalView: MTKView {
         for i in 0..<layerImages.count {
             let currentLayer = layerImages[i]
             let contentType = currentLayer.content
-            
+            if currentLayer.useStencil == false { continue }
             switch contentType {
             case .image(_):
                 
@@ -861,26 +882,6 @@ public class MaskMetalView: MTKView {
         }
         
         contentEncoder.endEncoding()
-        
-        // Final pass - render static rectangle
-        renderPassDescriptor.colorAttachments[0].loadAction = .load
-        guard let rectEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
-            return
-        }
-        
-        // Find the first layer with useStencil = false
-        if let nonStencilLayer = layerImages.first(where: { !$0.useStencil }) {
-            rectEncoder.setRenderPipelineState(staticRectPipelineState)
-            rectEncoder.setVertexBuffer(staticRectVertexBuffer, offset: 0, index: 0)
-            
-            // Set the texture from the non-stencil layer
-            if let texture = nonStencilLayer.texture {
-                rectEncoder.setFragmentTexture(texture, index: 0)
-                rectEncoder.setFragmentSamplerState(samplerState, index: 0)
-                rectEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-            }
-        }
-        rectEncoder.endEncoding()
         
         commandBuffer.present(drawable)
         commandBuffer.commit()

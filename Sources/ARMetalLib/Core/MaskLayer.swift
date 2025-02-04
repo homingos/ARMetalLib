@@ -28,6 +28,7 @@ public final class MaskLayer: @unchecked Sendable {
     var texture: MTLTexture?
     var scale: Float
     var videoType: VideoType = .normal
+    var useStencil: Bool = false
     
     // Computed property to access the type
     var type: ParallaxType {
@@ -63,12 +64,13 @@ public final class MaskLayer: @unchecked Sendable {
                 offset: SIMD3<Float>,
                 content: ParallaxContent,
                 texture: MTLTexture? = nil,
-                scale: Float = 1.0) {
+                scale: Float = 1.0, useStencil: Bool = true) {
         self.id = id
         self.offset = offset
         self.content = content
         self.texture = texture
         self.scale = scale
+        self.useStencil = useStencil
     }
     
     // Convenience initializer for images
@@ -76,12 +78,12 @@ public final class MaskLayer: @unchecked Sendable {
                             offset: SIMD3<Float>,
                             image: UIImage,
                             texture: MTLTexture? = nil,
-                            scale: Float = 1.0) {
+                            scale: Float = 1.0, useStencil: Bool = true) {
         self.init(id: id,
                   offset: offset,
                   content: .image(image),
                   texture: texture,
-                  scale: scale)
+                  scale: scale, useStencil: useStencil)
     }
     
     // Convenience initializer for videos
@@ -90,12 +92,12 @@ public final class MaskLayer: @unchecked Sendable {
                             videoPlayerOutput: AVPlayerItemVideoOutput?,
                             avplayer: AVPlayer,
                             texture: MTLTexture? = nil,
-                            scale: Float = 1.0, videoType: VideoType) {
+                            scale: Float = 1.0, videoType: VideoType, useStencil: Bool = true) {
         self.init(id: id,
                   offset: offset,
                   content: .video(videoPlayerOutput, avplayer, videoType),
                   texture: texture,
-                  scale: scale)
+                  scale: scale, useStencil: useStencil)
     }
     
     func copy() -> LayerImage {

@@ -20,6 +20,31 @@ struct VertexOut {
     uint textureIndex;
 };
 
+struct StaticRectVertex {
+    float3 position [[attribute(0)]];
+    float2 texCoord [[attribute(1)]];
+};
+
+struct RectVertexOut {
+    float4 position [[position]];
+    float2 texCoord;
+};
+
+// Modified static rectangle vertex shader with stage_in
+vertex RectVertexOut staticRectVertexShader(StaticRectVertex in [[stage_in]]) {
+    RectVertexOut out;
+    out.position = float4(in.position, 1.0);
+    out.texCoord = in.texCoord;
+    return out;
+}
+
+// Modified static rectangle fragment shader with stage_in
+fragment float4 staticRectFragmentShader(RectVertexOut in [[stage_in]],
+                                       texture2d<float> texture [[texture(0)]],
+                                       sampler textureSampler [[sampler(0)]]) {
+    return texture.sample(textureSampler, in.texCoord);
+}
+
 // Existing vertex shaders remain the same
 vertex VertexOut maskVertexShader(VertexIn in [[stage_in]], constant float4x4 *matrices [[buffer(1)]]) {
     VertexOut out;
@@ -92,12 +117,12 @@ fragment float4 fragmentShaderSplitTextureLR(VertexOut in [[stage_in]],
     return textureColor;
 }
 
-fragment float4 fragmentShaderSplitTD(VertexOut in [[stage_in]],
+fragment float4 fragmentShaderSplitTextureTD(VertexOut in [[stage_in]],
                                       array<texture2d<float>, 8> textures [[texture(0)]],
                                       sampler textureSampler [[sampler(0)]]) {
     // Modify texture coordinates as per original code
     float2 textureCoordinates = in.texCoord;
-    textureCoordinates.x = textureCoordinates.y / 2.0;
+    textureCoordinates.y = textureCoordinates.y / 2.0;
     
     // Sample the main texture
     float4 textureColor = textures[in.textureIndex].sample(textureSampler, textureCoordinates);

@@ -39,6 +39,7 @@ public class MaskMetalView: MTKView {
     
 //    weak var viewControllerDelegate: ARMetalViewDelegate?
     private var targetExtent: CGSize?
+    private var maskExtent: CGSize?
     private var maskOffset: SIMD3<Float> = .zero
     
     private var isBufferUpdated: Bool = false
@@ -47,7 +48,10 @@ public class MaskMetalView: MTKView {
     private var videoType: VideoType = .normal
     // for video player output dont replace or add new video output use the existing output
     private var imageTrackingStatus: TrackingStatus = .notRecoganized
-    private var drawBufferMaskOffset: MTLBuffer?
+    
+    //MARK: Full screen buffer
+    private var fullscreenExpBuffer: [MTLBuffer] = []
+    private var drawBufferMaskFullscreen: MTLBuffer?
     
     // MARK: static image that is not affected by the mask stencil
     private var staticRectPipelineState: MTLRenderPipelineState!
@@ -101,6 +105,20 @@ public class MaskMetalView: MTKView {
         )
         
         createStaticRectPipeline()
+    }
+    
+    public func updateFullScreenImage(aspectRatio: Float, scale: Float){
+        guard let staticRectVertexBuffer else { return }
+        let bufferVertex = staticRectVertexBuffer.contents().assumingMemoryBound(to: StaticRectVertex.self)
+        
+        let center: CGPoint = .zero
+        let viewAps = Float(frame.width / frame.height)
+        let extent = CGSize(width: 0.5 * Double(aspectRatio/viewAps) * Double(scale), height: 0.5 * Double(scale))
+        
+        bufferVertex[0].position = SIMD3<Float>(Float(center.x - extent.width/2), Float(center.y + extent.height/2), 0.0)
+        bufferVertex[1].position = SIMD3<Float>(Float(center.x + extent.width/2), Float(center.y + extent.height/2), 0.0)
+        bufferVertex[2].position = SIMD3<Float>(Float(center.x - extent.width/2), Float(center.y - extent.height/2), 0.0)
+        bufferVertex[3].position = SIMD3<Float>(Float(center.x + extent.width/2), Float(center.y - extent.height/2), 0.0)
     }
 
     private func createStaticRectPipeline() {
@@ -181,8 +199,44 @@ public class MaskMetalView: MTKView {
     /// Updated the Extent of the rendering Plane
     public func setTargetSize(targetSize: CGSize, maskTargetSize: CGSize){
         targetExtent = targetSize
+        maskExtent = maskTargetSize
         updateVertexBuffer(newExtent: targetSize)
         updateMaskVertices(maskVertexBuffer, maskTargetSize: maskTargetSize)
+        
+        // calculate the fullscreen Layer coordinates with mask for the scale factor to fit
+        updateFullscreenCoordinates()
+    }
+    
+    private func updateFullscreenCoordinates(){
+        var points: [SIMD3<Float>] = []
+        
+        // Setup the Fullscreen buffer
+        setupExpBufferFullscreen()
+        setupMaskBufferFullscreen()
+        // Experience points
+        for (index, layer) in layerImages.enumerated() {
+            if index < vertexBuffers.count {
+                let vertexBuffer = fullscreenExpBuffer[index]
+                let bufferPointer = vertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
+                
+                points.append(bufferPointer[0].position)
+                points.append(bufferPointer[1].position)
+                points.append(bufferPointer[2].position)
+                points.append(bufferPointer[3].position)
+            }
+        }
+        
+        // TODO: Target image to the points
+        
+        let scale = scaleFactorTofit(points: points, bound: CGSize(width: 1, height: 1))
+        print("new scale: \(scale)")
+
+        // Mask
+        preparemaskBufferFullscreen(scale: scale)
+        
+        // Experience Content
+        prepareExpBufferFullscreen(scale: scale)
+        
     }
     
     private func updateVertexBuffer(newExtent: CGSize) {
@@ -220,7 +274,10 @@ public class MaskMetalView: MTKView {
                 bufferPointer[3].position.x = (0.5 + xOffset) * scale * Float(newExtent.width)
                 bufferPointer[3].position.y = (0.5 + yOffset) * scale * Float(newExtent.height)
                 
-                print("Updated vertices for layer \(layer.id): \(bufferPointer[0].position)")
+                print("Updated vertices for layer 1 \(layer.id): \(bufferPointer[0].position)")
+                print("Updated vertices for layer 2 \(layer.id): \(bufferPointer[1].position)")
+                print("Updated vertices for layer 3 \(layer.id): \(bufferPointer[2].position)")
+                print("Updated vertices for layer 4 \(layer.id): \(bufferPointer[03].position)")
             }
         }
     }
@@ -747,7 +804,10 @@ public class MaskMetalView: MTKView {
         case .none:
             break
         case .Image(let uIImage, let offset):
-            let maskVB = prepareDrawBuffer(offset: offset)
+            var maskVB = maskVertexBuffer
+            if imageTrackingStatus == .trackingLost, let drawBufferMaskFullscreen{
+                maskVB = drawBufferMaskFullscreen
+            }
             
             maskEncoder.setVertexBuffer(maskVB, offset: 0, index: 0)
             maskEncoder.setFragmentTexture(maskTexture, index: 8)
@@ -763,26 +823,28 @@ public class MaskMetalView: MTKView {
         renderPassDescriptor.stencilAttachment.loadAction = .load
         renderPassDescriptor.colorAttachments[0].loadAction = .load
         
-        
-        // Final pass - render static rectangle
-        renderPassDescriptor.colorAttachments[0].loadAction = .load
-        guard let rectEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
-            return
-        }
-        
-        // Find the first layer with useStencil = false
-        if let nonStencilLayer = layerImages.first(where: { !$0.useStencil }) {
-            rectEncoder.setRenderPipelineState(staticRectPipelineState)
-            rectEncoder.setVertexBuffer(staticRectVertexBuffer, offset: 0, index: 0)
-            
-            // Set the texture from the non-stencil layer
-            if let texture = nonStencilLayer.texture {
-                rectEncoder.setFragmentTexture(texture, index: 0)
-                rectEncoder.setFragmentSamplerState(samplerState, index: 0)
-                rectEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        //MARK: to render bacnground image
+        if imageTrackingStatus == .trackingLost {
+            // Final pass - render static rectangle
+            renderPassDescriptor.colorAttachments[0].loadAction = .load
+            guard let rectEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+                return
             }
+            
+            // Find the first layer with useStencil = false
+            if let nonStencilLayer = layerImages.first(where: { !$0.useStencil }) {
+                rectEncoder.setRenderPipelineState(staticRectPipelineState)
+                rectEncoder.setVertexBuffer(staticRectVertexBuffer, offset: 0, index: 0)
+                
+                // Set the texture from the non-stencil layer
+                if let texture = nonStencilLayer.texture {
+                    rectEncoder.setFragmentTexture(texture, index: 0)
+                    rectEncoder.setFragmentSamplerState(samplerState, index: 0)
+                    rectEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+                }
+            }
+            rectEncoder.endEncoding()
         }
-        rectEncoder.endEncoding()
         
         // Second pass - render content with stencil test
         let contentEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor)!
@@ -823,7 +885,6 @@ public class MaskMetalView: MTKView {
             if currentLayer.useStencil == false { continue }
             switch contentType {
             case .image(_):
-                
                 if let texture = currentLayer.texture {
                     contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
                     contentEncoder.setFragmentTexture(texture, index: i)
@@ -854,14 +915,15 @@ public class MaskMetalView: MTKView {
                         0,
                         &cvTexture
                     )
-                    
+                    var buffer = vertexB[i]
                     // add the vertex logic to restrict the vertex
                     if imageTrackingStatus == .trackingLost {
-
+//                        constrainVideoFrame(vertexB[i])
+                        buffer = fullscreenExpBuffer[i]
                     }
                     if let texture = cvTexture {
                         let metalTexture = CVMetalTextureGetTexture(texture)
-                        contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
+                        contentEncoder.setVertexBuffer(buffer, offset: 0, index: 0)
                         contentEncoder.setFragmentTexture(metalTexture, index: i)
                         
                         contentEncoder.drawIndexedPrimitives(
@@ -905,28 +967,86 @@ public class MaskMetalView: MTKView {
         
         // Update x and z components (width and height) of each vertex
         // Vertex 0
-        bufferPointer[0].position.x = (-point) * Float(newExtent.width)
-        bufferPointer[0].position.y = (-point) * Float(newExtent.height)
+        var value: SIMD3<Float> = .zero
+        switch maskMode {
+        case .none:
+            break
+        case .Image(let _, let offset):
+            value = offset
+        case .VideoPlayer(let aVPlayerItemVideoOutput):
+            break
+        }
+        
+        bufferPointer[0].position.x = (-point + value.x) * Float(newExtent.width)
+        bufferPointer[0].position.y = (-point + value.y) * Float(newExtent.height)
         
         // Vertex 1
-        bufferPointer[1].position.x = (point) * Float(newExtent.width)
-        bufferPointer[1].position.y = (-point) * Float(newExtent.height)
+        bufferPointer[1].position.x = (point + value.x) * Float(newExtent.width)
+        bufferPointer[1].position.y = (-point + value.y) * Float(newExtent.height)
         
         // Vertex 2
-        bufferPointer[2].position.x = (-point) * Float(newExtent.width)
-        bufferPointer[2].position.y = (point) * Float(newExtent.height)
+        bufferPointer[2].position.x = (-point + value.x) * Float(newExtent.width)
+        bufferPointer[2].position.y = (point + value.y) * Float(newExtent.height)
         
         // Vertex 3
-        bufferPointer[3].position.x = (point) * Float(newExtent.width)
-        bufferPointer[3].position.y = (point) * Float(newExtent.height)
-        print("Mask vertices updated: \(bufferPointer[0].position)")
+        bufferPointer[3].position.x = (point + value.x) * Float(newExtent.width)
+        bufferPointer[3].position.y = (point + value.y) * Float(newExtent.height)
+        
+        print("Mask vertices updated: \(bufferPointer[0].position) + \(newExtent)")
     }
     
-    private func prepareDrawBuffer(offset: SIMD3<Float>) -> MTLBuffer? {
-        // Create draw buffer if needed
-        guard let device, let maskVertexBuffer else { return nil}
-        if drawBufferMaskOffset == nil {
-            drawBufferMaskOffset = device.makeBuffer(
+    private func scaleFactorTofit(points: [SIMD3<Float>], bound: CGSize) -> Float {
+        var maxX: Float = points[0].x
+        var maxY: Float = points[0].y
+        var minX: Float = points[0].x
+        var minY: Float = points[0].y
+        
+        // Print all input points
+        print("\nInput Points:")
+        for (index, point) in points.enumerated() {
+            print("Point \(index): (\(point.x), \(point.y), \(point.z))")
+        }
+        
+        // Compare with remaining points to find max and min
+        for point in points {
+            maxX = max(maxX, point.x)
+            maxY = max(maxY, point.y)
+            minX = min(minX, point.x)
+            minY = min(minY, point.y)
+        }
+        
+        // Print bounds
+        print("\nBounds:")
+        print("X range: [\(minX), \(maxX)]")
+        print("Y range: [\(minY), \(maxY)]")
+        
+        // bound box of the current experience
+        let currentWidth = abs(maxX - minX)
+        let currentHeight = abs(maxY - minY)
+        
+        print("\nDimensions:")
+        print("Current Width: \(currentWidth)")
+        print("Current Height: \(currentHeight)")
+        print("Target Bound Width: \(bound.width)")
+        print("Target Bound Height: \(bound.height)")
+        
+        let scalex = Float(bound.width) / currentWidth
+        let scaley = Float(bound.height) / currentHeight
+        
+        print("\nScale Factors:")
+        print("Scale X: \(scalex)")
+        print("Scale Y: \(scaley)")
+        
+        let scale = max(scalex, scaley)
+        print("Final Scale: \(scale)")
+        
+        return scale
+    }
+    
+    private func setupMaskBufferFullscreen() {
+        guard let device, let maskVertexBuffer else { return }
+        if drawBufferMaskFullscreen == nil {
+            drawBufferMaskFullscreen = device.makeBuffer(
                 length: maskVertexBuffer.length,
                 options: .storageModeShared
             )
@@ -934,16 +1054,89 @@ public class MaskMetalView: MTKView {
         
         // Get source and destination pointers
         let sourcePointer = maskVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
-        let destPointer = drawBufferMaskOffset!.contents().assumingMemoryBound(to: Vertex.self)
+        let destPointer = drawBufferMaskFullscreen!.contents().assumingMemoryBound(to: Vertex.self)
         
         // Copy vertices with offset
+        let asp = Float(maskExtent!.width / maskExtent!.height) / Float(targetExtent!.width / targetExtent!.height)
+
         for i in 0..<4 {
-            // Copy original vertex
             destPointer[i] = sourcePointer[i]
-            // Apply offset only to position
-            destPointer[i].position += offset
+            destPointer[i].position.y *= asp
         }
-        return drawBufferMaskOffset!
+    }
+    
+    private func setupExpBufferFullscreen() {
+        guard let device else { return }
+        if fullscreenExpBuffer.isEmpty {
+            for vertexBuffer in vertexBuffers {
+                if let newBuffer = device.makeBuffer(
+                    length: vertexBuffer.length,
+                    options: .storageModeShared
+                ) {
+                    fullscreenExpBuffer.append(newBuffer)
+                }
+            }
+        }
+        
+        for (index, buffer) in fullscreenExpBuffer.enumerated() {
+            let sourcePointer = vertexBuffers[index].contents().assumingMemoryBound(to: Vertex.self)
+            let destPointer = buffer.contents().assumingMemoryBound(to: Vertex.self)
+            
+            for i in 0..<4 {
+                destPointer[i] = sourcePointer[i]
+                let asp = Float(targetExtent!.width / targetExtent!.height)
+                destPointer[i].position.y /= Float(targetExtent!.width / targetExtent!.height)
+                
+            }
+        }
+    }
+    
+    private func preparemaskBufferFullscreen(scale: Float) -> MTLBuffer? {
+        // Create draw buffer if needed
+        guard let device, let maskVertexBuffer else { return nil}
+        if drawBufferMaskFullscreen == nil {
+            drawBufferMaskFullscreen = device.makeBuffer(
+                length: maskVertexBuffer.length,
+                options: .storageModeShared
+            )
+        }
+        
+        // Get source and destination pointers
+        let destPointer = drawBufferMaskFullscreen!.contents().assumingMemoryBound(to: Vertex.self)
+        
+        // Copy vertices with offset
+        let asp = Float(maskExtent!.width / maskExtent!.height) / Float(targetExtent!.width / targetExtent!.height)
+
+        for i in 0..<4 {
+            destPointer[i].position *= scale
+        }
+        return drawBufferMaskFullscreen!
+    }
+    
+    private func prepareExpBufferFullscreen(scale: Float) -> [MTLBuffer]{
+        guard let device else { return []}
+        if fullscreenExpBuffer.isEmpty {
+            for vertexBuffer in vertexBuffers {
+                if let newBuffer = device.makeBuffer(
+                    length: vertexBuffer.length,
+                    options: .storageModeShared
+                ) {
+                    fullscreenExpBuffer.append(newBuffer)
+                }
+            }
+        }
+        
+        for (index, buffer) in fullscreenExpBuffer.enumerated() {
+            let destPointer = buffer.contents().assumingMemoryBound(to: Vertex.self)
+            
+            for i in 0..<4 {
+                destPointer[i].position *= scale
+//                let asp = Float(targetExtent!.width / targetExtent!.height)
+//                destPointer[i].position.y /= Float(targetExtent!.width / targetExtent!.height)
+                
+            }
+        }
+        return fullscreenExpBuffer
     }
     
     private func updateUniforms(_ buffer: MTLBuffer) {

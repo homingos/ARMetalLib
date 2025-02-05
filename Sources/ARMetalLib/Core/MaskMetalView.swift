@@ -60,6 +60,12 @@ public class MaskMetalView: MTKView {
     
     private let viewAps: Float
     
+    /*
+    internal static var colorPickerResources: ColorPickerResources?
+    internal var targetTexture: MTLTexture?
+     
+        */
+    
     public init?(frame: CGRect, device: MTLDevice, maskMode: MaskMode, videoType: VideoType = .normal) {
         print("init ARMetalView")
         self.viewAps = Float(frame.width / frame.height)
@@ -1230,3 +1236,142 @@ public class MaskMetalView: MTKView {
         layerImageDic.removeAll()
     }
 }
+
+/*
+ 
+extension MaskMetalView {
+    
+    internal struct ColorPickerResources {
+        let colorTexture: MTLTexture
+        let colorBuffer: MTLBuffer
+        
+        init?(device: MTLDevice) {
+            let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .rgba8Unorm,
+                width: 1,
+                height: 1,
+                mipmapped: false
+            )
+            descriptor.usage = [.renderTarget, .shaderRead]
+            
+            guard let texture = device.makeTexture(descriptor: descriptor),
+                  let buffer = device.makeBuffer(length: 4, options: .storageModeShared) else {
+                return nil
+            }
+            
+            self.colorTexture = texture
+            self.colorBuffer = buffer
+        }
+    }
+    
+    public func getColorAtViewLocation(_ viewLocation: CGPoint) {
+        guard let targetTexture = targetTexture else { return }
+        
+        let converter = MetalViewCoordinateConverter(view: self, sceneView: nil, metalView: self)
+        let normalizedPoint = converter.convertMetalViewPoint(viewLocation)
+        
+        // Get color from the texture
+        getColorFromTexture(
+            texture: targetTexture,
+            normalizedX: Float(normalizedPoint.x),
+            normalizedY: Float(normalizedPoint.y),
+            originalViewLocation: viewLocation
+        )
+    }
+    
+    private func getColorFromTexture(
+        texture: MTLTexture,
+        normalizedX: Float,
+        normalizedY: Float,
+        originalViewLocation: CGPoint
+    ) {
+        guard let device = device,
+              let commandQueue = commandQueue else { return }
+        
+        // Lazily initialize color picker resources
+        if Self.colorPickerResources == nil {
+            Self.colorPickerResources = ColorPickerResources(device: device)
+        }
+        
+        guard let resources = Self.colorPickerResources else { return }
+        
+        // Create command buffer
+        let commandBuffer = commandQueue.makeCommandBuffer()
+        let blitEncoder = commandBuffer?.makeBlitCommandEncoder()
+        
+        // Calculate the pixel coordinates in the texture
+        let x = Int(normalizedX * Float(texture.width))
+        let y = Int(normalizedY * Float(texture.height))
+        
+        // Ensure coordinates are within texture bounds
+        let safeX = min(max(x, 0), texture.width - 1)
+        let safeY = min(max(y, 0), texture.height - 1)
+        
+        // Copy single pixel using optimized region
+        let region = MTLRegion(
+            origin: MTLOrigin(x: safeX, y: safeY, z: 0),
+            size: MTLSize(width: 1, height: 1, depth: 1)
+        )
+        
+        blitEncoder?.copy(
+            from: texture,
+            sourceSlice: 0,
+            sourceLevel: 0,
+            sourceOrigin: region.origin,
+            sourceSize: region.size,
+            to: resources.colorTexture,
+            destinationSlice: 0,
+            destinationLevel: 0,
+            destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0)
+        )
+        
+        blitEncoder?.endEncoding()
+        
+        // Copy from texture to buffer
+        let readEncoder = commandBuffer?.makeBlitCommandEncoder()
+        readEncoder?.copy(
+            from: resources.colorTexture,
+            sourceSlice: 0,
+            sourceLevel: 0,
+            sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+            sourceSize: MTLSize(width: 1, height: 1, depth: 1),
+            to: resources.colorBuffer,
+            destinationOffset: 0,
+            destinationBytesPerRow: 4,
+            destinationBytesPerImage: 4
+        )
+        
+        readEncoder?.endEncoding()
+        
+        // Handle color reading in completion handler
+        commandBuffer?.addCompletedHandler { [weak self] _ in
+            let bytes = resources.colorBuffer.contents().assumingMemoryBound(to: UInt8.self)
+            let color = UIColor(
+                red: CGFloat(bytes[0]) / 255.0,
+                green: CGFloat(bytes[1]) / 255.0,
+                blue: CGFloat(bytes[2]) / 255.0,
+                alpha: CGFloat(bytes[3]) / 255.0
+            )
+            
+            // Notify delegate on main thread
+            print("sdk: picked color \(color), at \(originalViewLocation), from texture \(texture), pixel coordinate \(safeX), \(safeY)")
+
+            /*
+            DispatchQueue.main.async {
+                if let delegate = self?.viewControllerDelegate as? TextureColorPickerDelegate {
+                    delegate.didPickColor(
+                        color,
+                        at: originalViewLocation,  // Return the original view location
+                        fromTexture: texture,
+                        pixelCoordinate: CGPoint(x: safeX, y: safeY)  // Add pixel coordinates
+                    )
+                }
+            }
+             */
+        }
+        
+        commandBuffer?.commit()
+    }
+}
+
+*/

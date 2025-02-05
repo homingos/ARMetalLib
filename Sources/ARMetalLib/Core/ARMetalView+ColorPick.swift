@@ -59,6 +59,24 @@ extension ARMetalView {
         )
     }
     
+    /*
+    public func getColorAtViewLocation(_ viewLocation: CGPoint) {
+        guard let targetTexture = targetTexture else { return }
+        
+        let converter = MetalViewCoordinateConverter(view: self, sceneView: nil, metalView: self)
+        let normalizedPoint = converter.convertMetalViewPoint(viewLocation)
+        
+        // Get color from the texture
+        getColorFromTexture(
+            texture: targetTexture,
+            normalizedX: Float(normalizedPoint.x),
+            normalizedY: Float(normalizedPoint.y),
+            originalViewLocation: viewLocation
+        )
+    }
+     
+     */
+    
     private func getColorFromTexture(
         texture: MTLTexture,
         normalizedX: Float,

@@ -94,20 +94,20 @@ public class MaskMetalView: MTKView {
     }
     
     private func setupStaticRectangle() {
-        // Create vertices for the static rectangle
+        // Create vertices for the static rectangle, flipped vertically (positions only)
         let vertices: [StaticRectVertex] = [
-            StaticRectVertex(position: SIMD3<Float>(-0.5, 0.5, 0.0), texCoord: SIMD2<Float>(0.0, 1.0)),    // Top-left
-            StaticRectVertex(position: SIMD3<Float>(0.5, 0.5, 0.0), texCoord: SIMD2<Float>(1.0, 1.0)),     // Top-right
-            StaticRectVertex(position: SIMD3<Float>(-0.5, -0.5, 0.0), texCoord: SIMD2<Float>(0.0, 0.0)),    // Bottom-left
-            StaticRectVertex(position: SIMD3<Float>(0.5, -0.5, 0.0), texCoord: SIMD2<Float>(1.0, 0.0))      // Bottom-right
+            StaticRectVertex(position: SIMD3<Float>(-0.5, -0.5, 0.0), texCoord: SIMD2<Float>(0.0, 0.0)),    // Bottom-left (was Top-left)
+            StaticRectVertex(position: SIMD3<Float>(0.5, -0.5, 0.0), texCoord: SIMD2<Float>(1.0, 0.0)),     // Bottom-right (was Top-right)
+            StaticRectVertex(position: SIMD3<Float>(-0.5, 0.5, 0.0), texCoord: SIMD2<Float>(0.0, 1.0)),     // Top-left (was Bottom-left)
+            StaticRectVertex(position: SIMD3<Float>(0.5, 0.5, 0.0), texCoord: SIMD2<Float>(1.0, 1.0))       // Top-right (was Bottom-right)
         ]
-        
+            
         staticRectVertexBuffer = device?.makeBuffer(
             bytes: vertices,
             length: vertices.count * MemoryLayout<StaticRectVertex>.stride,
             options: .storageModeShared
         )
-        
+            
         createStaticRectPipeline()
     }
     
@@ -1152,7 +1152,6 @@ public class MaskMetalView: MTKView {
             
             for i in 0..<4 {
                 destPointer[i] = sourcePointer[i]
-//                let asp = Float(targetExtent!.width / targetExtent!.height)
                 destPointer[i].position.y *= viewAps
                 
             }

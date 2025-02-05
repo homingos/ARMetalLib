@@ -1129,7 +1129,7 @@ public class MaskMetalView: MTKView {
 
         for i in 0..<4 {
             destPointer[i] = sourcePointer[i]
-            destPointer[i].position.y *= asp
+            destPointer[i].position.y *= viewAps
         }
     }
     
@@ -1152,8 +1152,8 @@ public class MaskMetalView: MTKView {
             
             for i in 0..<4 {
                 destPointer[i] = sourcePointer[i]
-                let asp = Float(targetExtent!.width / targetExtent!.height)
-                destPointer[i].position.y /= Float(targetExtent!.width / targetExtent!.height)
+//                let asp = Float(targetExtent!.width / targetExtent!.height)
+                destPointer[i].position.y *= viewAps
                 
             }
         }

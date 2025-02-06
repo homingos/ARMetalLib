@@ -240,7 +240,7 @@ public class MaskMetalView: MTKView {
         points.append(maksBuffer![2].position)
         points.append(maksBuffer![3].position)
         
-        let scale = scaleFactorTofit(points: points, bound: CGSize(width: 0.9, height: 0.9))
+        let scale = scaleFactorTofit(points: points, bound: CGSize(width: 1.0, height: 1.0))
         print("new scale: \(scale)")
 
         // Mask
@@ -274,25 +274,32 @@ public class MaskMetalView: MTKView {
                 
                 // Update x and z components (width and height) of each vertex
                 // Vertex 0
-                bufferPointer[0].position.x = (-0.5 + xOffset) * scale * Float(newExtent.width)
-                bufferPointer[0].position.y = (-0.5 + yOffset) * scale * Float(newExtent.height)
+                bufferPointer[0].position.x = (-0.5 ) * scale * Float(newExtent.width) + xOffset
+                bufferPointer[0].position.y = (-0.5 ) * scale * Float(newExtent.height) + yOffset
                 
                 // Vertex 1
-                bufferPointer[1].position.x = (0.5 + xOffset) * scale * Float(newExtent.width)
-                bufferPointer[1].position.y = (-0.5 + yOffset) * scale * Float(newExtent.height)
+                bufferPointer[1].position.x = (0.5 ) * scale * Float(newExtent.width) + xOffset
+                bufferPointer[1].position.y = (-0.5 ) * scale * Float(newExtent.height) + yOffset
                 
                 // Vertex 2
-                bufferPointer[2].position.x = (-0.5 + xOffset) * scale * Float(newExtent.width)
-                bufferPointer[2].position.y = (0.5 + yOffset) * scale * Float(newExtent.height)
+                bufferPointer[2].position.x = (-0.5 ) * scale * Float(newExtent.width) + xOffset
+                bufferPointer[2].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
                 
                 // Vertex 3
-                bufferPointer[3].position.x = (0.5 + xOffset) * scale * Float(newExtent.width)
-                bufferPointer[3].position.y = (0.5 + yOffset) * scale * Float(newExtent.height)
+                bufferPointer[3].position.x = (0.5 ) * scale * Float(newExtent.width) + xOffset
+                bufferPointer[3].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
                 
-                print("Updated vertices for layer 1 \(layer.id): \(bufferPointer[0].position)")
-                print("Updated vertices for layer 2 \(layer.id): \(bufferPointer[1].position)")
-                print("Updated vertices for layer 3 \(layer.id): \(bufferPointer[2].position)")
-                print("Updated vertices for layer 4 \(layer.id): \(bufferPointer[03].position)")
+                print("Check this bbb x: \((-0.5 ) * scale * Float(newExtent.width))")
+                print("Check this bbb y: \((-0.5 ) * scale * Float(newExtent.height))")
+                print("Check this bbb x: \((0.5 ) * scale * Float(newExtent.width))")
+                print("Check this bbb y: \((-0.5 ) * scale * Float(newExtent.height))")
+
+                
+                
+//                print("Updated vertices for layer 1 \(layer.id): \(bufferPointer[0].position)")
+//                print("Updated vertices for layer 2 \(layer.id): \(bufferPointer[1].position)")
+//                print("Updated vertices for layer 3 \(layer.id): \(bufferPointer[2].position)")
+//                print("Updated vertices for layer 4 \(layer.id): \(bufferPointer[03].position)")
             }
         }
     }
@@ -673,20 +680,43 @@ public class MaskMetalView: MTKView {
         
         for (index, layer) in layerImages.enumerated() {
             // Calculate offset based on layer priority
-            let zOffset =  Float(layer.offset.z) * 0.1 // Small z-offset to prevent z-fighting
-            let xOffset =  Float(layer.offset.x) // Small x-offset to prevent z-fighting
-            let yOffset =  Float(layer.offset.y) // Small y-offset to prevent z-fighting
+            let zOffset = Float(layer.offset.z) * 0.1 // Small z-offset to prevent z-fighting
+            let xOffset = Float(layer.offset.x) // x-offset
+            let yOffset = Float(layer.offset.y) // y-offset
             
             let extent = targetExtent ?? CGSize(width: 1.0, height: 1.0)
             let scale = layer.scale
             
             let vertices: [Vertex] = [
-                Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), (-0.5 + yOffset) * scale * Float(extent.height), zOffset), texCoord: SIMD2<Float>(0.0, 1.0), textureIndex: UInt32(index)),
-                Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), (-0.5 + yOffset) * scale * Float(extent.height), zOffset) , texCoord: SIMD2<Float>(1.0, 1.0), textureIndex: UInt32(index)),
-                Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), zOffset) , texCoord: SIMD2<Float>(0.0, 0.0), textureIndex: UInt32(index)),
-                Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), zOffset), texCoord: SIMD2<Float>(1.0, 0.0), textureIndex: UInt32(index))
+                // Vertex 0
+                Vertex(position: SIMD3<Float>(
+                    (-0.5) * scale * Float(extent.width) + xOffset,
+                    (-0.5) * scale * Float(extent.height) + yOffset,
+                    zOffset
+                ), texCoord: SIMD2<Float>(0.0, 1.0), textureIndex: UInt32(index)),
+                
+                // Vertex 1
+                Vertex(position: SIMD3<Float>(
+                    (0.5) * scale * Float(extent.width) + xOffset,
+                    (-0.5) * scale * Float(extent.height) + yOffset,
+                    zOffset
+                ), texCoord: SIMD2<Float>(1.0, 1.0), textureIndex: UInt32(index)),
+                
+                // Vertex 2
+                Vertex(position: SIMD3<Float>(
+                    (-0.5) * scale * Float(extent.width) + xOffset,
+                    (0.5) * scale * Float(extent.height) + yOffset,
+                    zOffset
+                ), texCoord: SIMD2<Float>(0.0, 0.0), textureIndex: UInt32(index)),
+                
+                // Vertex 3
+                Vertex(position: SIMD3<Float>(
+                    (0.5) * scale * Float(extent.width) + xOffset,
+                    (0.5) * scale * Float(extent.height) + yOffset,
+                    zOffset
+                ), texCoord: SIMD2<Float>(1.0, 0.0), textureIndex: UInt32(index))
             ]
-            print("for \(layer.id): offset is : \(vertices)")
+            print("for \(layer.id): offset is : \(xOffset) + \(yOffset)")
             
             let indices: [UInt16] = [
                 0, 1, 2,  // First triangle
@@ -712,7 +742,6 @@ public class MaskMetalView: MTKView {
         let uniformBufferSize = MemoryLayout<simd_float4x4>.stride * 3
         uniformBuffer = device?.makeBuffer(length: uniformBufferSize, options: .storageModeShared)
         print("111: setupLayerVertices is executed")
-        
     }
     
     private func loadTexture(named name: String) -> MTLTexture? {
@@ -1015,13 +1044,7 @@ public class MaskMetalView: MTKView {
         var maxY: Float = points[0].y
         var minX: Float = points[0].x
         var minY: Float = points[0].y
-        
-        // Print all input points
-        print("\nInput Points:")
-        for (index, point) in points.enumerated() {
-            print("Point \(index): (\(point.x), \(point.y), \(point.z))")
-        }
-        
+
         // Compare with remaining points to find max and min
         for point in points {
             maxX = max(maxX, point.x)
@@ -1030,30 +1053,14 @@ public class MaskMetalView: MTKView {
             minY = min(minY, point.y)
         }
         
-        // Print bounds
-        print("\nOriginal Bounds:")
-        print("X range: [\(minX), \(maxX)]")
-        print("Y range: [\(minY), \(maxY)]")
-        
         // bound box of the current experience
         let currentWidth = abs(maxX - minX)
         let currentHeight = abs(maxY - minY)
         
-        print("\nDimensions:")
-        print("Current Width: \(currentWidth)")
-        print("Current Height: \(currentHeight)")
-        print("Target Bound Width: \(bound.width * 2)")
-        print("Target Bound Height: \(bound.height * 2)")
-        
         let scalex = Float(bound.width * 2) / currentWidth
         let scaley = Float(bound.height * 2) / currentHeight
         
-        print("\nScale Factors:")
-        print("Scale X: \(scalex)")
-        print("Scale Y: \(scaley)")
-        
         let scale = min(scalex, scaley)
-        print("Final Scale: \(scale)")
         
         // Calculate scaled points
         let scaledPoints = points.map { SIMD3<Float>($0.x * scale, $0.y * scale, $0.z) }
@@ -1070,11 +1077,7 @@ public class MaskMetalView: MTKView {
             scaledMinX = min(scaledMinX, point.x)
             scaledMinY = min(scaledMinY, point.y)
         }
-        
-        print("\nScaled bounds before offset:")
-        print("X range: [\(scaledMinX), \(scaledMaxX)]")
-        print("Y range: [\(scaledMinY), \(scaledMaxY)]")
-        
+
         // Calculate center of scaled points
         let centerX = (scaledMaxX + scaledMinX) / 2.0
         let centerY = (scaledMaxY + scaledMinY) / 2.0
@@ -1082,13 +1085,7 @@ public class MaskMetalView: MTKView {
         // Calculate offset to center the points
         let offsetX = -centerX
         let offsetY = -centerY
-        
-        print("\nCalculated offsets:")
-        print("Offset X: \(offsetX)")
-        print("Offset Y: \(offsetY)")
-        
-        // Print final positions after both scaling and offset
-        print("\nFinal points after scaling and offset:")
+
         for (index, point) in scaledPoints.enumerated() {
             let finalPoint = SIMD3<Float>(
                 point.x + offsetX,

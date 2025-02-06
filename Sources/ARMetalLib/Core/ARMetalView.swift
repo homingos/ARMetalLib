@@ -76,7 +76,7 @@ public class ARMetalView: MTKView {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.framebufferOnly = false
-        self.maskMode = maskMode
+        self.maskMode = .none
         // true if you want to update the draw call manually using setNeedsDisplay()
         self.enableSetNeedsDisplay = true
         
@@ -136,7 +136,7 @@ public class ARMetalView: MTKView {
                 let xOffset = Float(layer.offset.x)
                 let yOffset = Float(layer.offset.y)
                 let scale = layer.scale
-                
+                print("offset: \(layer.offset)")
                 // Update x and z components (width and height) of each vertex
                 // Vertex 0
                 bufferPointer[0].position.x = (-0.5 + xOffset) * scale * Float(newExtent.width)
@@ -213,7 +213,7 @@ public class ARMetalView: MTKView {
             layerImages.append(layerValues)
         }
         // Sort for the render order
-        layerImages.sort { $0.offset.y < $1.offset.y }
+        layerImages.sort { $0.offset.z < $1.offset.z }
         for ele in layerImages {
             print("Layers added: \(ele.description)")
         }
@@ -468,7 +468,7 @@ public class ARMetalView: MTKView {
                 Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), zOffset) , texCoord: SIMD2<Float>(0.0, 0.0), textureIndex: UInt32(index)),
                 Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), zOffset), texCoord: SIMD2<Float>(1.0, 0.0), textureIndex: UInt32(index))
             ]
-            print("for \(layer.id): offset is : \(vertices)")
+            print("for \(layer.id): offset is : offset is : \(vertices)")
             
             let indices: [UInt16] = [
                 0, 1, 2,  // First triangle
@@ -653,7 +653,6 @@ public class ARMetalView: MTKView {
             
             switch contentType {
             case .image(_):
-                
                 if let texture = currentLayer.texture {
                     contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
                     contentEncoder.setFragmentTexture(texture, index: i)

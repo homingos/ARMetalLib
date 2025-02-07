@@ -40,7 +40,7 @@ public class MaskMetalView: MTKView {
 //    weak var viewControllerDelegate: ARMetalViewDelegate?
     private var targetExtent: CGSize?
     private var maskExtent: CGSize?
-    private var targetFullscreenAspectRatio: Float?
+    private var targetFullscreenExtent: CGSize?
     private var maskOffset: SIMD3<Float> = .zero
     
     private var isBufferUpdated: Bool = false
@@ -111,13 +111,13 @@ public class MaskMetalView: MTKView {
         createStaticRectPipeline()
     }
     
-    private func updateFullScreenImage(fullscreenAspectRatio: Float, scale: Float, offset: SIMD2<Float>){
+    private func updateFullScreenImage(targetFullscreenExtent: CGSize, offset: SIMD2<Float>){
         
         guard let staticRectVertexBuffer else { return }
         let bufferVertex = staticRectVertexBuffer.contents().assumingMemoryBound(to: StaticRectVertex.self)
         
         let center: CGPoint = .zero
-        let extent = CGSize(width: 0.5 * Double(1/viewAps) * Double(fullscreenAspectRatio) * Double(scale), height: 0.5 * Double(scale))
+        let extent = CGSize(width: 0.5 * Double(1/viewAps) * targetFullscreenExtent.width, height: 0.5 * targetFullscreenExtent.height)
         let xValue = center.x + Double(offset.x)
         let yValue = center.y + Double(offset.y)
         
@@ -125,6 +125,16 @@ public class MaskMetalView: MTKView {
         bufferVertex[1].position = SIMD3<Float>(Float(xValue + extent.width/2), Float(yValue + extent.height/2), 0.0)
         bufferVertex[2].position = SIMD3<Float>(Float(xValue - extent.width/2), Float(yValue - extent.height/2), 0.0)
         bufferVertex[3].position = SIMD3<Float>(Float(xValue + extent.width/2), Float(yValue - extent.height/2), 0.0)
+    }
+    
+    private func prepareFullscreenImage(scale: Float, offset: SIMD2<Float>){
+        guard let staticRectVertexBuffer else { return }
+        let bufferVertex = staticRectVertexBuffer.contents().assumingMemoryBound(to: StaticRectVertex.self)
+        
+        for i in 0..<4 {
+            bufferVertex[i].position *= scale
+            bufferVertex[i].position += SIMD3(offset.x, offset.y, 0.0)
+        }
     }
 
     private func createStaticRectPipeline() {
@@ -203,10 +213,10 @@ public class MaskMetalView: MTKView {
 //    }
     
     /// Updated the Extent of the rendering Plane
-    public func setTargetSize(targetSize: CGSize, maskTargetSize: CGSize, targetFullscreenAspectRatio: Float? = nil){
+    public func setTargetSize(targetSize: CGSize, maskTargetSize: CGSize, targetFullscreenExtent: CGSize){
         targetExtent = targetSize
         maskExtent = maskTargetSize
-        self.targetFullscreenAspectRatio = targetFullscreenAspectRatio
+        self.targetFullscreenExtent = targetFullscreenExtent
         updateVertexBuffer(newExtent: targetSize)
         updateMaskVertices(maskVertexBuffer, maskTargetSize: maskTargetSize)
         
@@ -220,6 +230,7 @@ public class MaskMetalView: MTKView {
         // Setup the Fullscreen buffer
         setupExpBufferFullscreen()
         setupMaskBufferFullscreen()
+        updateFullScreenImage(targetFullscreenExtent: targetFullscreenExtent!, offset: .zero)
         // Experience points
         for (index, layer) in layerImages.enumerated() {
             if index < vertexBuffers.count {
@@ -240,6 +251,15 @@ public class MaskMetalView: MTKView {
         points.append(maksBuffer![2].position)
         points.append(maksBuffer![3].position)
         
+        // Adding ovlerlay image
+        if let staticRectVertexBuffer {
+            let overlayBuffer = staticRectVertexBuffer.contents().assumingMemoryBound(to: StaticRectVertex.self)
+            points.append(overlayBuffer[0].position)
+            points.append(overlayBuffer[1].position)
+            points.append(overlayBuffer[2].position)
+            points.append(overlayBuffer[3].position)
+        }
+
         let scale = scaleFactorTofit(points: points, bound: CGSize(width: 1.0, height: 1.0))
         print("new scale: \(scale)")
 
@@ -250,7 +270,7 @@ public class MaskMetalView: MTKView {
         prepareExpBufferFullscreen(scale: scale.scale, offset: scale.offset)
         
         // setup fullscreen scale
-        updateFullScreenImage(fullscreenAspectRatio: targetFullscreenAspectRatio ?? 1.0, scale: scale.scale, offset: scale.offset)
+        prepareFullscreenImage(scale: scale.scale, offset: scale.offset)
         
     }
     
@@ -294,8 +314,6 @@ public class MaskMetalView: MTKView {
                 print("Check this bbb x: \((0.5 ) * scale * Float(newExtent.width))")
                 print("Check this bbb y: \((-0.5 ) * scale * Float(newExtent.height))")
 
-                
-                
 //                print("Updated vertices for layer 1 \(layer.id): \(bufferPointer[0].position)")
 //                print("Updated vertices for layer 2 \(layer.id): \(bufferPointer[1].position)")
 //                print("Updated vertices for layer 3 \(layer.id): \(bufferPointer[2].position)")
@@ -1172,8 +1190,9 @@ public class MaskMetalView: MTKView {
         let asp = Float(maskExtent!.width / maskExtent!.height) / Float(targetExtent!.width / targetExtent!.height)
 
         for i in 0..<4 {
-            destPointer[i].position += SIMD3<Float>(offset.x, offset.y, 0.0)
             destPointer[i].position *= scale
+            destPointer[i].position += SIMD3<Float>(offset.x, offset.y, 0.0)
+            
         }
         return drawBufferMaskFullscreen!
     }
@@ -1195,8 +1214,8 @@ public class MaskMetalView: MTKView {
             let destPointer = buffer.contents().assumingMemoryBound(to: Vertex.self)
             
             for i in 0..<4 {
-                destPointer[i].position += SIMD3<Float>(offset.x, offset.y, 0.0)
                 destPointer[i].position *= scale
+                destPointer[i].position += SIMD3<Float>(offset.x, offset.y, 0.0)
 //                let asp = Float(targetExtent!.width / targetExtent!.height)
 //                destPointer[i].position.y /= Float(targetExtent!.width / targetExtent!.height)
                 

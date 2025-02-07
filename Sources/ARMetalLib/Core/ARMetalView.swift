@@ -76,7 +76,7 @@ public class ARMetalView: MTKView {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.framebufferOnly = false
-        self.maskMode = .none
+        self.maskMode = maskMode
         // true if you want to update the draw call manually using setNeedsDisplay()
         self.enableSetNeedsDisplay = true
         

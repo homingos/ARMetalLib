@@ -64,7 +64,7 @@ public class ARMetalView: MTKView {
     // for video player output dont replace or add new video output use the existing output
     
     public init?(frame: CGRect, device: MTLDevice, viewControllerDelegate: ARMetalViewDelegate, maskMode: MaskMode) {
-        print("init ARMetalView")
+        print("init ARMetalView123")
         super.init(frame: frame, device: device)
         self.device = device
         

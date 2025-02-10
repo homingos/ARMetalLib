@@ -548,20 +548,11 @@ public class ARMetalView: MTKView {
     func updateMaskImage(_ image: UIImage) {
         guard let device = device,
               let cgImage = image.cgImage else { return }
-        
-        let textureLoader = MTKTextureLoader(device: device)
-        do {
-            let textureOptions: [MTKTextureLoader.Option: Any] = [
-                .SRGB: false,
-                .generateMipmaps: true,
-                .textureUsage: MTLTextureUsage([.shaderRead]).rawValue
-            ]
-            maskTexture = try textureLoader.newTexture(
-                cgImage: cgImage,
-                options: textureOptions
-            )
-        } catch {
-            print("Failed to load mask texture: \(error)")
+        print("Updating mask image...")
+        if let texture = loadTextureFromImage(image, device: device){
+            maskTexture = texture
+        } else {
+            print("Failed to load mask texture: ")
         }
     }
     

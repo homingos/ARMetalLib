@@ -88,23 +88,23 @@ public class MaskMetalView: MTKView {
         fatalError("init(coder:) has not been implemented")
     }
     
-    private struct StaticRectVertex {
-        var position: SIMD3<Float>
-        var texCoord: SIMD2<Float>
-    }
+//    private struct StaticRectVertex {
+//        var position: SIMD3<Float>
+//        var texCoord: SIMD2<Float>
+//    }
     
     private func setupStaticRectangle() {
         // Create vertices for the static rectangle, flipped vertically (positions only)
-        let vertices: [StaticRectVertex] = [
-            StaticRectVertex(position: SIMD3<Float>(-0.5, -0.5, 0.0), texCoord: SIMD2<Float>(0.0, 1.0)),
-            StaticRectVertex(position: SIMD3<Float>(0.5, -0.5, 0.0), texCoord: SIMD2<Float>(1.0, 1.0)),
-            StaticRectVertex(position: SIMD3<Float>(-0.5, 0.5, 0.0), texCoord: SIMD2<Float>(0.0, 0.0)),
-            StaticRectVertex(position: SIMD3<Float>(0.5, 0.5, 0.0), texCoord: SIMD2<Float>(1.0, 0.0))
+        let vertices: [Vertex] = [
+            Vertex(position: SIMD3<Float>(-0.5, -0.5, 0.0), texCoord: SIMD2<Float>(0.0, 1.0), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(0.5, -0.5, 0.0), texCoord: SIMD2<Float>(1.0, 1.0), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(-0.5, 0.5, 0.0), texCoord: SIMD2<Float>(0.0, 0.0), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(0.5, 0.5, 0.0), texCoord: SIMD2<Float>(1.0, 0.0), textureIndex: 0)
         ]
             
         staticRectVertexBuffer = device?.makeBuffer(
             bytes: vertices,
-            length: vertices.count * MemoryLayout<StaticRectVertex>.stride,
+            length: vertices.count * MemoryLayout<Vertex>.stride,
             options: .storageModeShared
         )
             
@@ -114,7 +114,7 @@ public class MaskMetalView: MTKView {
     private func updateFullScreenImage(targetFullscreenExtent: CGSize, offset: SIMD2<Float>){
         
         guard let staticRectVertexBuffer else { return }
-        let bufferVertex = staticRectVertexBuffer.contents().assumingMemoryBound(to: StaticRectVertex.self)
+        let bufferVertex = staticRectVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
         
         let center: CGPoint = .zero
         let extent = CGSize(width: 0.5 * Double(1/viewAps) * targetFullscreenExtent.width, height: 0.5 * targetFullscreenExtent.height)
@@ -129,7 +129,7 @@ public class MaskMetalView: MTKView {
     
     private func prepareFullscreenImage(scale: Float, offset: SIMD2<Float>){
         guard let staticRectVertexBuffer else { return }
-        let bufferVertex = staticRectVertexBuffer.contents().assumingMemoryBound(to: StaticRectVertex.self)
+        let bufferVertex = staticRectVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
         
         for i in 0..<4 {
             bufferVertex[i].position *= scale
@@ -142,8 +142,8 @@ public class MaskMetalView: MTKView {
         
         do {
             let library = try device.makeDefaultLibrary(bundle: Bundle.module)
-            guard let vertexFunction = library.makeFunction(name: "staticRectVertexShader"),
-                  let fragmentFunction = library.makeFunction(name: "staticRectFragmentShader") else {
+            guard let vertexFunction = library.makeFunction(name: "vertexShader"),
+                  let fragmentFunction = library.makeFunction(name: "fragmentShader") else {
                 return
             }
             
@@ -151,6 +151,19 @@ public class MaskMetalView: MTKView {
             pipelineDescriptor.label = "Static Rectangle Pipeline"
             pipelineDescriptor.vertexFunction = vertexFunction
             pipelineDescriptor.fragmentFunction = fragmentFunction
+            pipelineDescriptor.colorAttachments[0].pixelFormat = self.colorPixelFormat
+            pipelineDescriptor.depthAttachmentPixelFormat = .depth32Float_stencil8
+            pipelineDescriptor.stencilAttachmentPixelFormat = .depth32Float_stencil8
+            
+            // Configure blending
+            let attachment = pipelineDescriptor.colorAttachments[0]
+            attachment?.isBlendingEnabled = true
+            attachment?.rgbBlendOperation = .add
+            attachment?.alphaBlendOperation = .add
+            attachment?.sourceRGBBlendFactor = .sourceAlpha
+            attachment?.sourceAlphaBlendFactor = .one
+            attachment?.destinationRGBBlendFactor = .oneMinusSourceAlpha
+            attachment?.destinationAlphaBlendFactor = .oneMinusSourceAlpha
             
             // Configure vertex descriptor for static rectangle
             let vertexDescriptor = MTLVertexDescriptor()
@@ -165,22 +178,15 @@ public class MaskMetalView: MTKView {
             vertexDescriptor.attributes[1].offset = MemoryLayout<SIMD3<Float>>.stride
             vertexDescriptor.attributes[1].bufferIndex = 0
             
+            // Texture index
+            vertexDescriptor.attributes[2].format = .uint
+            vertexDescriptor.attributes[2].offset = MemoryLayout<SIMD3<Float>>.stride + MemoryLayout<SIMD2<Float>>.stride
+            vertexDescriptor.attributes[2].bufferIndex = 0
+            
             // Buffer layout
-            vertexDescriptor.layouts[0].stride = MemoryLayout<StaticRectVertex>.stride
+            vertexDescriptor.layouts[0].stride = MemoryLayout<Vertex>.stride
             
             pipelineDescriptor.vertexDescriptor = vertexDescriptor
-            
-            // Configure color attachment
-            let colorAttachment = pipelineDescriptor.colorAttachments[0]
-            colorAttachment?.pixelFormat = self.colorPixelFormat
-            colorAttachment?.isBlendingEnabled = true
-            colorAttachment?.sourceRGBBlendFactor = .sourceAlpha
-            colorAttachment?.sourceAlphaBlendFactor = .sourceAlpha
-            colorAttachment?.destinationRGBBlendFactor = .oneMinusSourceAlpha
-            colorAttachment?.destinationAlphaBlendFactor = .oneMinusSourceAlpha
-            
-            pipelineDescriptor.depthAttachmentPixelFormat = .depth32Float_stencil8
-            pipelineDescriptor.stencilAttachmentPixelFormat = .depth32Float_stencil8
             
             staticRectPipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
         } catch {
@@ -245,7 +251,7 @@ public class MaskMetalView: MTKView {
         }
         
         // TODO: Target image to the points
-        let maksBuffer = drawBufferMaskFullscreen?.contents().assumingMemoryBound(to: StaticRectVertex.self)
+        let maksBuffer = drawBufferMaskFullscreen?.contents().assumingMemoryBound(to: Vertex.self)
         points.append(maksBuffer![0].position)
         points.append(maksBuffer![1].position)
         points.append(maksBuffer![2].position)
@@ -253,7 +259,7 @@ public class MaskMetalView: MTKView {
         
         // Adding ovlerlay image
         if let staticRectVertexBuffer {
-            let overlayBuffer = staticRectVertexBuffer.contents().assumingMemoryBound(to: StaticRectVertex.self)
+            let overlayBuffer = staticRectVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
             points.append(overlayBuffer[0].position)
             points.append(overlayBuffer[1].position)
             points.append(overlayBuffer[2].position)
@@ -313,11 +319,6 @@ public class MaskMetalView: MTKView {
                 print("Check this bbb y: \((-0.5 ) * scale * Float(newExtent.height))")
                 print("Check this bbb x: \((0.5 ) * scale * Float(newExtent.width))")
                 print("Check this bbb y: \((-0.5 ) * scale * Float(newExtent.height))")
-
-//                print("Updated vertices for layer 1 \(layer.id): \(bufferPointer[0].position)")
-//                print("Updated vertices for layer 2 \(layer.id): \(bufferPointer[1].position)")
-//                print("Updated vertices for layer 3 \(layer.id): \(bufferPointer[2].position)")
-//                print("Updated vertices for layer 4 \(layer.id): \(bufferPointer[03].position)")
             }
         }
     }
@@ -778,6 +779,8 @@ public class MaskMetalView: MTKView {
             // Apply the maskImage if present
             switch maskMode {
             case .none:
+                var maskVB = maskVertexBuffer
+                maskEncoder.setVertexBuffer(maskVB, offset: 0, index: 0)
                 break
             case .Image(let uIImage, let offset):
                 var maskVB = maskVertexBuffer
@@ -799,28 +802,95 @@ public class MaskMetalView: MTKView {
             renderPassDescriptor.stencilAttachment.loadAction = .load
             renderPassDescriptor.colorAttachments[0].loadAction = .load
             
-            //MARK: to render bacnground image
-            if imageTrackingStatus == .trackingLost {
-                // Final pass - render static rectangle
-                renderPassDescriptor.colorAttachments[0].loadAction = .load
-                guard let rectEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
-                    return
-                }
-                
-                // Find the first layer with useStencil = false
-                if let nonStencilLayer = layerImages.first(where: { !$0.useStencil }) {
-                    rectEncoder.setRenderPipelineState(staticRectPipelineState)
-                    rectEncoder.setVertexBuffer(staticRectVertexBuffer, offset: 0, index: 0)
-                    
-                    // Set the texture from the non-stencil layer
-                    if let texture = nonStencilLayer.texture {
-                        rectEncoder.setFragmentTexture(texture, index: 0)
-                        rectEncoder.setFragmentSamplerState(samplerState, index: 0)
-                        rectEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-                    }
-                }
-                rectEncoder.endEncoding()
+            var vertexB = vertexBuffers
+            
+            //MARK: to render background image
+            guard let nonStencilEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+                return
             }
+
+            // Setup common encoder state
+            nonStencilEncoder.setRenderPipelineState(staticRectPipelineState)
+            updateUniforms(uniformBuffer)
+            nonStencilEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
+            nonStencilEncoder.setFragmentSamplerState(samplerState, index: 0)
+
+            if imageTrackingStatus == .trackingLost {
+                // Render overlay layer first (if exists and has valid texture)
+                if let overlayLayer = layerImageDic[-1],
+                   let texture = overlayLayer.texture {  // Check for valid texture
+                    nonStencilEncoder.setVertexBuffer(staticRectVertexBuffer, offset: 0, index: 0)
+                    nonStencilEncoder.setFragmentTexture(texture, index: 0)
+                    nonStencilEncoder.drawIndexedPrimitives(
+                        type: .triangle,
+                        indexCount: 6,
+                        indexType: .uint16,
+                        indexBuffer: indexBuffers[0],
+                        indexBufferOffset: 0
+                    )
+                }
+            }
+
+            // Process other non-stencil layers
+            for i in 0..<layerImages.count {
+                let currentLayer = layerImages[i]
+                if currentLayer.useStencil || currentLayer.id == -1 { continue }
+                
+                switch currentLayer.content {
+                case .image(_):
+                    guard let texture = currentLayer.texture else { continue }  // Skip if no texture
+                    nonStencilEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
+                    nonStencilEncoder.setFragmentTexture(texture, index: 0)
+                    nonStencilEncoder.drawIndexedPrimitives(
+                        type: .triangle,
+                        indexCount: 6,
+                        indexType: .uint16,
+                        indexBuffer: indexBuffers[i],
+                        indexBufferOffset: 0
+                    )
+                    
+                case .video(let playerItemVideoOutput, let avplayer, _):
+                    let time = avplayer.currentTime()
+                    guard let videoOutput = playerItemVideoOutput,
+                          let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil),
+                          let textureCache = currentLayer.textureCache else { continue }
+                    
+                    var cvTexture: CVMetalTexture?
+                    let width = CVPixelBufferGetWidth(pixelBuffer)
+                    let height = CVPixelBufferGetHeight(pixelBuffer)
+                    
+                    CVMetalTextureCacheCreateTextureFromImage(
+                        nil,
+                        textureCache,
+                        pixelBuffer,
+                        nil,
+                        .bgra8Unorm,
+                        width,
+                        height,
+                        0,
+                        &cvTexture
+                    )
+                    
+                    guard let texture = cvTexture,
+                          let metalTexture = CVMetalTextureGetTexture(texture) else { continue }
+                    
+                    let buffer = imageTrackingStatus == .trackingLost ? fullscreenExpBuffer[i] : vertexB[i]
+                    nonStencilEncoder.setVertexBuffer(buffer, offset: 0, index: 0)
+                    nonStencilEncoder.setFragmentTexture(metalTexture, index: i)
+                    nonStencilEncoder.drawIndexedPrimitives(
+                        type: .triangle,
+                        indexCount: 6,
+                        indexType: .uint16,
+                        indexBuffer: indexBuffers[i],
+                        indexBufferOffset: 0
+                    )
+                    
+                case .model(_):
+                    break
+                }
+            }
+
+            nonStencilEncoder.endEncoding()
             
             guard let contentEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
                 print("Failed to create content encoder")
@@ -837,7 +907,7 @@ public class MaskMetalView: MTKView {
             let copiedLayerImages = layerImages.map { $0.copy() }
             //        let newOffset = viewControllerDelegate?.willUpdateDraw(layerImages: copiedLayerImages)
             let newOffset:[SIMD3<Float>]? = nil
-            var vertexB = vertexBuffers
+            
             if newOffset == nil {
                 
             } else {

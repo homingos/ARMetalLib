@@ -899,8 +899,8 @@ public class MaskMetalView: MTKView {
                             //                        constrainVideoFrame(vertexB[i])
                             buffer = fullscreenExpBuffer[i]
                         }
-                        if let texture = cvTexture {
-                            let metalTexture = CVMetalTextureGetTexture(texture)
+                        if let texture = cvTexture,
+                           let metalTexture = CVMetalTextureGetTexture(texture) {
                             contentEncoder.setVertexBuffer(buffer, offset: 0, index: 0)
                             contentEncoder.setFragmentTexture(metalTexture, index: i)
                             
@@ -911,6 +911,8 @@ public class MaskMetalView: MTKView {
                                 indexBuffer: indexBuffers[i],
                                 indexBufferOffset: 0
                             )
+                        } else {
+                            print("Failed to get metal texture from CVMetalTexture")
                         }
                     } else {
                         print("things ar enot valid")

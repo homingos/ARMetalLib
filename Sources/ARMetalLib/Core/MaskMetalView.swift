@@ -745,162 +745,127 @@ public class MaskMetalView: MTKView {
     }
     
     public override func draw(_ rect: CGRect) {
-        
-        guard let uniformBuffer = uniformBuffer,
-              let maskVertexBuffer,
-              let drawable = currentDrawable,
-              let commandBuffer = commandQueue?.makeCommandBuffer(),
-              let renderPassDescriptor = currentRenderPassDescriptor,
-              let writeStencilState = writeStencilState,
-              let testStencilState = testStencilState else {
-            return
-        }
-        // First pass - render mask to stencil buffer
-        renderPassDescriptor.stencilAttachment.clearStencil = 0
-        renderPassDescriptor.stencilAttachment.loadAction = .clear
-        renderPassDescriptor.stencilAttachment.storeAction = .store
-        
-        // Clear color for first pass
-        renderPassDescriptor.colorAttachments[0].loadAction = .clear
-        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-        
-        guard let maskEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
-            return
-        }
-        maskEncoder.setRenderPipelineState(maskRenderPipelineState)
-        maskEncoder.setDepthStencilState(writeStencilState)
-        maskEncoder.setStencilReferenceValue(1)
-        //        print("drawing")
-        // Render mask geometry
-        // TODO: Create the buffer only once not every frame
-        maskEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
-        
-        // Apply the maskImage if present
-        switch maskMode {
-        case .none:
-            break
-        case .Image(let uIImage, let offset):
-            var maskVB = maskVertexBuffer
-            if imageTrackingStatus == .trackingLost, let drawBufferMaskFullscreen{
-                maskVB = drawBufferMaskFullscreen
-            }
-            
-            maskEncoder.setVertexBuffer(maskVB, offset: 0, index: 0)
-            maskEncoder.setFragmentTexture(maskTexture, index: 8)
-            maskEncoder.setFragmentSamplerState(samplerState, index: 0)
-        case .VideoPlayer(_):
-            break
-        }
-        
-        maskEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-        maskEncoder.endEncoding()
-        
-        // Second pass - ensure we're keeping the stencil
-        renderPassDescriptor.stencilAttachment.loadAction = .load
-        renderPassDescriptor.colorAttachments[0].loadAction = .load
-        
-        //MARK: to render bacnground image
-        if imageTrackingStatus == .trackingLost {
-            // Final pass - render static rectangle
-            renderPassDescriptor.colorAttachments[0].loadAction = .load
-            guard let rectEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+        autoreleasepool {
+            guard let uniformBuffer = uniformBuffer,
+                  let maskVertexBuffer,
+                  let drawable = currentDrawable,
+                  let commandBuffer = commandQueue?.makeCommandBuffer(),
+                  let renderPassDescriptor = currentRenderPassDescriptor,
+                  let writeStencilState = writeStencilState,
+                  let testStencilState = testStencilState else {
                 return
             }
+            // First pass - render mask to stencil buffer
+            renderPassDescriptor.stencilAttachment.clearStencil = 0
+            renderPassDescriptor.stencilAttachment.loadAction = .clear
+            renderPassDescriptor.stencilAttachment.storeAction = .store
             
-            // Find the first layer with useStencil = false
-            if let nonStencilLayer = layerImages.first(where: { !$0.useStencil }) {
-                rectEncoder.setRenderPipelineState(staticRectPipelineState)
-                rectEncoder.setVertexBuffer(staticRectVertexBuffer, offset: 0, index: 0)
+            // Clear color for first pass
+            renderPassDescriptor.colorAttachments[0].loadAction = .clear
+            renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+            
+            guard let maskEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+                return
+            }
+            maskEncoder.setRenderPipelineState(maskRenderPipelineState)
+            maskEncoder.setDepthStencilState(writeStencilState)
+            maskEncoder.setStencilReferenceValue(1)
+            //        print("drawing")
+            // Render mask geometry
+            // TODO: Create the buffer only once not every frame
+            maskEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
+            
+            // Apply the maskImage if present
+            switch maskMode {
+            case .none:
+                break
+            case .Image(let uIImage, let offset):
+                var maskVB = maskVertexBuffer
+                if imageTrackingStatus == .trackingLost, let drawBufferMaskFullscreen{
+                    maskVB = drawBufferMaskFullscreen
+                }
                 
-                // Set the texture from the non-stencil layer
-                if let texture = nonStencilLayer.texture {
-                    rectEncoder.setFragmentTexture(texture, index: 0)
-                    rectEncoder.setFragmentSamplerState(samplerState, index: 0)
-                    rectEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-                }
+                maskEncoder.setVertexBuffer(maskVB, offset: 0, index: 0)
+                maskEncoder.setFragmentTexture(maskTexture, index: 8)
+                maskEncoder.setFragmentSamplerState(samplerState, index: 0)
+            case .VideoPlayer(_):
+                break
             }
-            rectEncoder.endEncoding()
-        }
-        
-        // Second pass - render content with stencil test
-        let contentEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor)!
-        contentEncoder.setRenderPipelineState(renderPipelineState)
-        contentEncoder.setDepthStencilState(testStencilState)
-        contentEncoder.setStencilReferenceValue(1)  // Must match the value written in the mask pass
-        contentEncoder.setFragmentSamplerState(samplerState, index: 0)
-        
-        // TODO: Update this for supporting multi-Parallax
-        updateUniforms(uniformBuffer)
-        contentEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
-        let copiedLayerImages = layerImages.map { $0.copy() }
-//        let newOffset = viewControllerDelegate?.willUpdateDraw(layerImages: copiedLayerImages)
-        let newOffset:[SIMD3<Float>]? = nil
-        var vertexB = vertexBuffers
-        if newOffset == nil {
             
-        } else {
-            if let newOffset {
-                for i in 0..<vertexB.count {
-                    let existingVertexBuffer = vertexB[i]
-                    let layerIndex = i / 4
-                    let bufferPointer = existingVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
-                    print("before: \(bufferPointer[0].position)")
-                    bufferPointer[0].position += newOffset[layerIndex]
-                    bufferPointer[1].position += newOffset[layerIndex]
-                    bufferPointer[2].position += newOffset[layerIndex]
-                    bufferPointer[3].position += newOffset[layerIndex]
+            maskEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            maskEncoder.endEncoding()
+            
+            // Second pass - ensure we're keeping the stencil
+            renderPassDescriptor.stencilAttachment.loadAction = .load
+            renderPassDescriptor.colorAttachments[0].loadAction = .load
+            
+            //MARK: to render bacnground image
+            if imageTrackingStatus == .trackingLost {
+                // Final pass - render static rectangle
+                renderPassDescriptor.colorAttachments[0].loadAction = .load
+                guard let rectEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+                    return
+                }
+                
+                // Find the first layer with useStencil = false
+                if let nonStencilLayer = layerImages.first(where: { !$0.useStencil }) {
+                    rectEncoder.setRenderPipelineState(staticRectPipelineState)
+                    rectEncoder.setVertexBuffer(staticRectVertexBuffer, offset: 0, index: 0)
                     
-                    print("after: \(bufferPointer[0].position)")
+                    // Set the texture from the non-stencil layer
+                    if let texture = nonStencilLayer.texture {
+                        rectEncoder.setFragmentTexture(texture, index: 0)
+                        rectEncoder.setFragmentSamplerState(samplerState, index: 0)
+                        rectEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+                    }
+                }
+                rectEncoder.endEncoding()
+            }
+            
+            guard let contentEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+                print("Failed to create content encoder")
+                return
+            }
+            contentEncoder.setRenderPipelineState(renderPipelineState)
+            contentEncoder.setDepthStencilState(testStencilState)
+            contentEncoder.setStencilReferenceValue(1)  // Must match the value written in the mask pass
+            contentEncoder.setFragmentSamplerState(samplerState, index: 0)
+            
+            // TODO: Update this for supporting multi-Parallax
+            updateUniforms(uniformBuffer)
+            contentEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
+            let copiedLayerImages = layerImages.map { $0.copy() }
+            //        let newOffset = viewControllerDelegate?.willUpdateDraw(layerImages: copiedLayerImages)
+            let newOffset:[SIMD3<Float>]? = nil
+            var vertexB = vertexBuffers
+            if newOffset == nil {
+                
+            } else {
+                if let newOffset {
+                    for i in 0..<vertexB.count {
+                        let existingVertexBuffer = vertexB[i]
+                        let layerIndex = i / 4
+                        let bufferPointer = existingVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
+                        print("before: \(bufferPointer[0].position)")
+                        bufferPointer[0].position += newOffset[layerIndex]
+                        bufferPointer[1].position += newOffset[layerIndex]
+                        bufferPointer[2].position += newOffset[layerIndex]
+                        bufferPointer[3].position += newOffset[layerIndex]
+                        
+                        print("after: \(bufferPointer[0].position)")
+                    }
                 }
             }
-        }
-        // Draw each layer
-        for i in 0..<layerImages.count {
-            let currentLayer = layerImages[i]
-            let contentType = currentLayer.content
-            if currentLayer.useStencil == false { continue }
-            switch contentType {
-            case .image(_):
-                if let texture = currentLayer.texture {
-                    contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
-                    contentEncoder.setFragmentTexture(texture, index: i)
-                    
-                    contentEncoder.drawIndexedPrimitives(
-                        type: .triangle,
-                        indexCount: 6,
-                        indexType: .uint16,
-                        indexBuffer: indexBuffers[i],
-                        indexBufferOffset: 0
-                    )
-                }
-            case .video(let playerItemVideoOutput, let avplayer, let videoType):
-                let time = avplayer.currentTime()
-                if let videoOutput = playerItemVideoOutput, let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil), let textureCache = currentLayer.textureCache {
-                    
-                    var cvTexture: CVMetalTexture?
-                    let width = CVPixelBufferGetWidth(pixelBuffer)
-                    let height = CVPixelBufferGetHeight(pixelBuffer)
-                    CVMetalTextureCacheCreateTextureFromImage(
-                        nil,
-                        textureCache,
-                        pixelBuffer,
-                        nil,
-                        .bgra8Unorm,
-                        width,
-                        height,
-                        0,
-                        &cvTexture
-                    )
-                    var buffer = vertexB[i]
-                    // add the vertex logic to restrict the vertex
-                    if imageTrackingStatus == .trackingLost {
-//                        constrainVideoFrame(vertexB[i])
-                        buffer = fullscreenExpBuffer[i]
-                    }
-                    if let texture = cvTexture {
-                        let metalTexture = CVMetalTextureGetTexture(texture)
-                        contentEncoder.setVertexBuffer(buffer, offset: 0, index: 0)
-                        contentEncoder.setFragmentTexture(metalTexture, index: i)
+            // Draw each layer
+            for i in 0..<layerImages.count {
+                let currentLayer = layerImages[i]
+                let contentType = currentLayer.content
+                if currentLayer.useStencil == false { continue }
+                switch contentType {
+                case .image(_):
+                    if let texture = currentLayer.texture {
+                        contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
+                        contentEncoder.setFragmentTexture(texture, index: i)
                         
                         contentEncoder.drawIndexedPrimitives(
                             type: .triangle,
@@ -910,19 +875,57 @@ public class MaskMetalView: MTKView {
                             indexBufferOffset: 0
                         )
                     }
-                } else {
-                    print("things ar enot valid")
+                case .video(let playerItemVideoOutput, let avplayer, let videoType):
+                    let time = avplayer.currentTime()
+                    if let videoOutput = playerItemVideoOutput, let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil), let textureCache = currentLayer.textureCache {
+                        
+                        var cvTexture: CVMetalTexture?
+                        let width = CVPixelBufferGetWidth(pixelBuffer)
+                        let height = CVPixelBufferGetHeight(pixelBuffer)
+                        CVMetalTextureCacheCreateTextureFromImage(
+                            nil,
+                            textureCache,
+                            pixelBuffer,
+                            nil,
+                            .bgra8Unorm,
+                            width,
+                            height,
+                            0,
+                            &cvTexture
+                        )
+                        var buffer = vertexB[i]
+                        // add the vertex logic to restrict the vertex
+                        if imageTrackingStatus == .trackingLost {
+                            //                        constrainVideoFrame(vertexB[i])
+                            buffer = fullscreenExpBuffer[i]
+                        }
+                        if let texture = cvTexture {
+                            let metalTexture = CVMetalTextureGetTexture(texture)
+                            contentEncoder.setVertexBuffer(buffer, offset: 0, index: 0)
+                            contentEncoder.setFragmentTexture(metalTexture, index: i)
+                            
+                            contentEncoder.drawIndexedPrimitives(
+                                type: .triangle,
+                                indexCount: 6,
+                                indexType: .uint16,
+                                indexBuffer: indexBuffers[i],
+                                indexBufferOffset: 0
+                            )
+                        }
+                    } else {
+                        print("things ar enot valid")
+                    }
+                case .model(let uRL):
+                    // TODO: For 3d objects
+                    break
                 }
-            case .model(let uRL):
-                // TODO: For 3d objects
-                break
             }
+            
+            contentEncoder.endEncoding()
+            
+            commandBuffer.present(drawable)
+            commandBuffer.commit()
         }
-        
-        contentEncoder.endEncoding()
-        
-        commandBuffer.present(drawable)
-        commandBuffer.commit()
     }
     
     private func createMaskVertices() -> [Vertex] {

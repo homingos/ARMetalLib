@@ -113,3 +113,9 @@ func loadTextureFromImage(_ image: UIImage, device: MTLDevice) -> MTLTexture? {
         return texture
     }
 }
+
+extension Array {
+    subscript(safe index: Index) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}

@@ -61,7 +61,7 @@ public class MaskMetalView: MTKView {
     private let viewAps: Float
     
     public init?(frame: CGRect, device: MTLDevice, maskMode: MaskMode, videoType: VideoType = .normal) {
-        print("init ARMetalView")
+        print("init MaskMetalView")
         self.viewAps = Float(frame.width / frame.height)
         super.init(frame: frame, device: device)
         self.device = device
@@ -96,10 +96,10 @@ public class MaskMetalView: MTKView {
     private func setupStaticRectangle() {
         // Create vertices for the static rectangle, flipped vertically (positions only)
         let vertices: [StaticRectVertex] = [
-            StaticRectVertex(position: SIMD3<Float>(-0.5, -0.5, 0.0), texCoord: SIMD2<Float>(0.0, 0.0)),    // Bottom-left (was Top-left)
-            StaticRectVertex(position: SIMD3<Float>(0.5, -0.5, 0.0), texCoord: SIMD2<Float>(1.0, 0.0)),     // Bottom-right (was Top-right)
-            StaticRectVertex(position: SIMD3<Float>(-0.5, 0.5, 0.0), texCoord: SIMD2<Float>(0.0, 1.0)),     // Top-left (was Bottom-left)
-            StaticRectVertex(position: SIMD3<Float>(0.5, 0.5, 0.0), texCoord: SIMD2<Float>(1.0, 1.0))       // Top-right (was Bottom-right)
+            StaticRectVertex(position: SIMD3<Float>(-0.5, -0.5, 0.0), texCoord: SIMD2<Float>(0.0, 1.0)),
+            StaticRectVertex(position: SIMD3<Float>(0.5, -0.5, 0.0), texCoord: SIMD2<Float>(1.0, 1.0)),
+            StaticRectVertex(position: SIMD3<Float>(-0.5, 0.5, 0.0), texCoord: SIMD2<Float>(0.0, 0.0)),
+            StaticRectVertex(position: SIMD3<Float>(0.5, 0.5, 0.0), texCoord: SIMD2<Float>(1.0, 0.0))
         ]
             
         staticRectVertexBuffer = device?.makeBuffer(

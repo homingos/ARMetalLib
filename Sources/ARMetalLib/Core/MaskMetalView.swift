@@ -756,7 +756,7 @@ public class MaskMetalView: MTKView {
                   let testStencilState = testStencilState else {
                 return
             }
-            // First pass - render mask to stencil buffer
+            // MARK: First pass - render mask to stencil buffer
             renderPassDescriptor.stencilAttachment.clearStencil = 0
             renderPassDescriptor.stencilAttachment.loadAction = .clear
             renderPassDescriptor.stencilAttachment.storeAction = .store
@@ -804,7 +804,7 @@ public class MaskMetalView: MTKView {
             
             var vertexB = vertexBuffers
             
-            //MARK: to render background image
+            //MARK: Rendering non stencil part
             guard let nonStencilEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
                 return
             }
@@ -858,7 +858,6 @@ public class MaskMetalView: MTKView {
                     var cvTexture: CVMetalTexture?
                     let width = CVPixelBufferGetWidth(pixelBuffer)
                     let height = CVPixelBufferGetHeight(pixelBuffer)
-                    
                     CVMetalTextureCacheCreateTextureFromImage(
                         nil,
                         textureCache,
@@ -892,6 +891,7 @@ public class MaskMetalView: MTKView {
 
             nonStencilEncoder.endEncoding()
             
+            //MARK: Rendering stencil part
             guard let contentEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
                 print("Failed to create content encoder")
                 return
@@ -1205,8 +1205,6 @@ public class MaskMetalView: MTKView {
             for i in 0..<4 {
                 destPointer[i].position *= scale
                 destPointer[i].position += SIMD3<Float>(offset.x, offset.y, 0.0)
-//                let asp = Float(targetExtent!.width / targetExtent!.height)
-//                destPointer[i].position.y /= Float(targetExtent!.width / targetExtent!.height)
                 
             }
         }

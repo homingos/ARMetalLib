@@ -59,6 +59,8 @@ public class MaskMetalView: MTKView {
     private var nonStencilPipelineLayer: MTLRenderPipelineState!
     private var nonStencilImageBuffer: MTLBuffer!
     
+    private var isUpdatingLayers: Bool = false
+    
     private let viewAps: Float
     
     public init?(frame: CGRect, device: MTLDevice, maskMode: MaskMode, videoType: VideoType = .normal) {
@@ -287,7 +289,6 @@ public class MaskMetalView: MTKView {
 //    func setDelegate(controller: ARMetalViewDelegate){
 //        self.viewControllerDelegate = controller
 //    }
-    
     /// Updated the Extent of the rendering Plane
     public func setTargetSize(targetSize: CGSize, maskTargetSize: CGSize, targetFullscreenExtent: CGSize){
         targetExtent = targetSize
@@ -395,6 +396,10 @@ public class MaskMetalView: MTKView {
     
     private func setLayerImage(layerImage: [Int: MaskLayer]){
         guard let device else { return }
+        isUpdatingLayers = true
+        defer {
+            isUpdatingLayers = false
+        }
         layerImages.removeAll()
         let textureLoader = MTKTextureLoader(device: device)
         let textureOptions: [MTKTextureLoader.Option: Any] = [
@@ -816,6 +821,7 @@ public class MaskMetalView: MTKView {
     }
     
     public override func draw(_ rect: CGRect) {
+        guard !isUpdatingLayers else { return }
         autoreleasepool {
             guard let uniformBuffer = uniformBuffer,
                   let maskVertexBuffer,

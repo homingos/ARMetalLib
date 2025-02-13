@@ -55,8 +55,9 @@ public class MaskMetalView: MTKView {
     private var drawBufferMaskFullscreen: MTLBuffer?
     
     // MARK: static image that is not affected by the mask stencil
-    private var staticRectPipelineState: MTLRenderPipelineState!
-    private var staticRectVertexBuffer: MTLBuffer!
+    private var nonStencilPipelineImage: MTLRenderPipelineState!
+    private var nonStencilPipelineLayer: MTLRenderPipelineState!
+    private var nonStencilImageBuffer: MTLBuffer!
     
     private let viewAps: Float
     
@@ -102,19 +103,20 @@ public class MaskMetalView: MTKView {
             Vertex(position: SIMD3<Float>(0.5, 0.5, 0.0), texCoord: SIMD2<Float>(1.0, 0.0), textureIndex: 0)
         ]
             
-        staticRectVertexBuffer = device?.makeBuffer(
+        nonStencilImageBuffer = device?.makeBuffer(
             bytes: vertices,
             length: vertices.count * MemoryLayout<Vertex>.stride,
             options: .storageModeShared
         )
             
-        createStaticRectPipeline()
+        createNonStecilPipeline()
+        createNonStecilPipelineImage()
     }
     
     private func updateFullScreenImage(targetFullscreenExtent: CGSize, offset: SIMD2<Float>){
         
-        guard let staticRectVertexBuffer else { return }
-        let bufferVertex = staticRectVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
+        guard let nonStencilImageBuffer else { return }
+        let bufferVertex = nonStencilImageBuffer.contents().assumingMemoryBound(to: Vertex.self)
         
         let center: CGPoint = .zero
         let extent = CGSize(width: 0.5 * Double(1/viewAps) * targetFullscreenExtent.width, height: 0.5 * targetFullscreenExtent.height)
@@ -128,8 +130,8 @@ public class MaskMetalView: MTKView {
     }
     
     private func prepareFullscreenImage(scale: Float, offset: SIMD2<Float>){
-        guard let staticRectVertexBuffer else { return }
-        let bufferVertex = staticRectVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
+        guard let nonStencilImageBuffer else { return }
+        let bufferVertex = nonStencilImageBuffer.contents().assumingMemoryBound(to: Vertex.self)
         
         for i in 0..<4 {
             bufferVertex[i].position *= scale
@@ -137,15 +139,83 @@ public class MaskMetalView: MTKView {
         }
     }
 
-    private func createStaticRectPipeline() {
+    private func createNonStecilPipeline() {
         guard let device = self.device else { return }
         
         do {
             let library = try device.makeDefaultLibrary(bundle: Bundle.module)
-            guard let vertexFunction = library.makeFunction(name: "vertexShader"),
-                  let fragmentFunction = library.makeFunction(name: "fragmentShader") else {
+            guard let vertexFunction = library.makeFunction(name: "vertexShader") else {
                 return
             }
+            var fragmentFunction = library.makeFunction(name: "fragmentShader")
+            
+            switch self.videoType {
+            case .normal:
+                fragmentFunction = library.makeFunction(name: "fragmentShader")
+            case .alpha(config: let config):
+                switch config {
+                case .LR:
+                    fragmentFunction = library.makeFunction(name: "fragmentShaderSplitTextureLR")
+                case .TD:
+                    fragmentFunction = library.makeFunction(name: "fragmentShaderSplitTextureTD")
+                }
+            }
+            let pipelineDescriptor = MTLRenderPipelineDescriptor()
+            pipelineDescriptor.label = "Static Rectangle Pipeline"
+            pipelineDescriptor.vertexFunction = vertexFunction
+            pipelineDescriptor.fragmentFunction = fragmentFunction
+            pipelineDescriptor.colorAttachments[0].pixelFormat = self.colorPixelFormat
+            pipelineDescriptor.depthAttachmentPixelFormat = .depth32Float_stencil8
+            pipelineDescriptor.stencilAttachmentPixelFormat = .depth32Float_stencil8
+            
+            // Configure blending
+            let attachment = pipelineDescriptor.colorAttachments[0]
+            attachment?.isBlendingEnabled = true
+            attachment?.rgbBlendOperation = .add
+            attachment?.alphaBlendOperation = .add
+            attachment?.sourceRGBBlendFactor = .sourceAlpha
+            attachment?.sourceAlphaBlendFactor = .one
+            attachment?.destinationRGBBlendFactor = .oneMinusSourceAlpha
+            attachment?.destinationAlphaBlendFactor = .oneMinusSourceAlpha
+            
+            // Configure vertex descriptor for static rectangle
+            let vertexDescriptor = MTLVertexDescriptor()
+            
+            // Position attribute
+            vertexDescriptor.attributes[0].format = .float3
+            vertexDescriptor.attributes[0].offset = 0
+            vertexDescriptor.attributes[0].bufferIndex = 0
+            
+            // Texture coordinate attribute
+            vertexDescriptor.attributes[1].format = .float2
+            vertexDescriptor.attributes[1].offset = MemoryLayout<SIMD3<Float>>.stride
+            vertexDescriptor.attributes[1].bufferIndex = 0
+            
+            // Texture index
+            vertexDescriptor.attributes[2].format = .uint
+            vertexDescriptor.attributes[2].offset = MemoryLayout<SIMD3<Float>>.stride + MemoryLayout<SIMD2<Float>>.stride
+            vertexDescriptor.attributes[2].bufferIndex = 0
+            
+            // Buffer layout
+            vertexDescriptor.layouts[0].stride = MemoryLayout<Vertex>.stride
+            
+            pipelineDescriptor.vertexDescriptor = vertexDescriptor
+            
+            nonStencilPipelineLayer = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+        } catch {
+            print("Failed to create static rectangle pipeline: \(error)")
+        }
+    }
+    
+    private func createNonStecilPipelineImage() {
+        guard let device = self.device else { return }
+        
+        do {
+            let library = try device.makeDefaultLibrary(bundle: Bundle.module)
+            guard let vertexFunction = library.makeFunction(name: "vertexShader"), let fragmentFunction = library.makeFunction(name: "fragmentShader") else {
+                return
+            }
+            
             
             let pipelineDescriptor = MTLRenderPipelineDescriptor()
             pipelineDescriptor.label = "Static Rectangle Pipeline"
@@ -188,7 +258,7 @@ public class MaskMetalView: MTKView {
             
             pipelineDescriptor.vertexDescriptor = vertexDescriptor
             
-            staticRectPipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+            nonStencilPipelineImage = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
         } catch {
             print("Failed to create static rectangle pipeline: \(error)")
         }
@@ -258,8 +328,8 @@ public class MaskMetalView: MTKView {
         points.append(maksBuffer![3].position)
         
         // Adding ovlerlay image
-        if let staticRectVertexBuffer {
-            let overlayBuffer = staticRectVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
+        if let nonStencilImageBuffer {
+            let overlayBuffer = nonStencilImageBuffer.contents().assumingMemoryBound(to: Vertex.self)
             points.append(overlayBuffer[0].position)
             points.append(overlayBuffer[1].position)
             points.append(overlayBuffer[2].position)
@@ -808,9 +878,9 @@ public class MaskMetalView: MTKView {
             guard let nonStencilEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
                 return
             }
-
+            
             // Setup common encoder state
-            nonStencilEncoder.setRenderPipelineState(staticRectPipelineState)
+            nonStencilEncoder.setRenderPipelineState(nonStencilPipelineImage)
             updateUniforms(uniformBuffer)
             nonStencilEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
             nonStencilEncoder.setFragmentSamplerState(samplerState, index: 0)
@@ -819,7 +889,7 @@ public class MaskMetalView: MTKView {
                 // Render overlay layer first (if exists and has valid texture)
                 if let overlayLayer = layerImageDic[-1],
                    let texture = overlayLayer.texture {  // Check for valid texture
-                    nonStencilEncoder.setVertexBuffer(staticRectVertexBuffer, offset: 0, index: 0)
+                    nonStencilEncoder.setVertexBuffer(nonStencilImageBuffer, offset: 0, index: 0)
                     nonStencilEncoder.setFragmentTexture(texture, index: 0)
                     nonStencilEncoder.drawIndexedPrimitives(
                         type: .triangle,
@@ -831,6 +901,16 @@ public class MaskMetalView: MTKView {
                 }
             }
 
+            nonStencilEncoder.endEncoding()
+            
+            //MARK: Rendering non stencil Experience part
+            guard let nonStencilEncoderExp = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else { return }
+            // Setup common encoder state
+            nonStencilEncoderExp.setRenderPipelineState(nonStencilPipelineLayer)
+            updateUniforms(uniformBuffer)
+            nonStencilEncoderExp.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
+            nonStencilEncoderExp.setFragmentSamplerState(samplerState, index: 0)
+            
             // Process other non-stencil layers
             for i in 0..<layerImages.count {
                 let currentLayer = layerImages[i]
@@ -839,9 +919,9 @@ public class MaskMetalView: MTKView {
                 switch currentLayer.content {
                 case .image(_):
                     guard let texture = currentLayer.texture else { continue }  // Skip if no texture
-                    nonStencilEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
-                    nonStencilEncoder.setFragmentTexture(texture, index: 0)
-                    nonStencilEncoder.drawIndexedPrimitives(
+                    nonStencilEncoderExp.setVertexBuffer(vertexB[i], offset: 0, index: 0)
+                    nonStencilEncoderExp.setFragmentTexture(texture, index: 0)
+                    nonStencilEncoderExp.drawIndexedPrimitives(
                         type: .triangle,
                         indexCount: 6,
                         indexType: .uint16,
@@ -874,9 +954,9 @@ public class MaskMetalView: MTKView {
                           let metalTexture = CVMetalTextureGetTexture(texture) else { continue }
                     
                     let buffer = imageTrackingStatus == .trackingLost ? fullscreenExpBuffer[i] : vertexB[i]
-                    nonStencilEncoder.setVertexBuffer(buffer, offset: 0, index: 0)
-                    nonStencilEncoder.setFragmentTexture(metalTexture, index: i)
-                    nonStencilEncoder.drawIndexedPrimitives(
+                    nonStencilEncoderExp.setVertexBuffer(buffer, offset: 0, index: 0)
+                    nonStencilEncoderExp.setFragmentTexture(metalTexture, index: i)
+                    nonStencilEncoderExp.drawIndexedPrimitives(
                         type: .triangle,
                         indexCount: 6,
                         indexType: .uint16,
@@ -888,8 +968,7 @@ public class MaskMetalView: MTKView {
                     break
                 }
             }
-
-            nonStencilEncoder.endEncoding()
+            nonStencilEncoderExp.endEncoding()
             
             //MARK: Rendering stencil part
             guard let contentEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {

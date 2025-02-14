@@ -96,6 +96,9 @@ public class MaskMetalView: MTKView {
 //        var texCoord: SIMD2<Float>
 //    }
     
+    public func getLayerCount() -> Int{
+        return layerImageDic.count
+    }
     private func setupStaticRectangle() {
         // Create vertices for the static rectangle, flipped vertically (positions only)
         let vertices: [Vertex] = [
@@ -337,14 +340,14 @@ public class MaskMetalView: MTKView {
             points.append(overlayBuffer[3].position)
         }
 
-        let scale = scaleFactorTofit(points: points, bound: CGSize(width: 1.0, height: 1.0))
+        let scale = scaleFactorTofit(points: points, bound: CGSize(width: 0.95, height: 0.95))
         print("new scale: \(scale)")
 
         // Mask
-        preparemaskBufferFullscreen(scale: scale.scale, offset: scale.offset)
+        preparemaskBufferFullscreen(scale: scale.scale * 1.06, offset: scale.offset )
         
         // Experience Content
-        prepareExpBufferFullscreen(scale: scale.scale, offset: scale.offset)
+        prepareExpBufferFullscreen(scale: scale.scale * 1.06, offset: scale.offset )
         
         // setup fullscreen scale
         prepareFullscreenImage(scale: scale.scale, offset: scale.offset)
@@ -1309,6 +1312,18 @@ public class MaskMetalView: MTKView {
             matrices[1] = matrix_identity_float4x4
             matrices[2] = matrix_identity_float4x4
         }
+    }
+    
+    public func clearLayes(){
+        layerImages.removeAll()
+        layerImageDic.removeAll()
+        
+        clearVertexBuffer()
+    }
+    
+    private func clearVertexBuffer(){
+        vertexBuffers.removeAll()
+        indexBuffers.removeAll()
     }
     
     deinit {

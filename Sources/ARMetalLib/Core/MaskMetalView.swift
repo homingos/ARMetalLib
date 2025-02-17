@@ -40,6 +40,7 @@ public class MaskMetalView: MTKView {
 //    weak var viewControllerDelegate: ARMetalViewDelegate?
     private var targetExtent: CGSize?
     private var maskExtent: CGSize?
+    private var playbackScale: Float? = 1.0
     private var targetFullscreenExtent: CGSize?
     private var maskOffset: SIMD3<Float> = .zero
     
@@ -293,9 +294,10 @@ public class MaskMetalView: MTKView {
 //        self.viewControllerDelegate = controller
 //    }
     /// Updated the Extent of the rendering Plane
-    public func setTargetSize(targetSize: CGSize, maskTargetSize: CGSize, targetFullscreenExtent: CGSize){
+    public func setTargetSize(targetSize: CGSize, maskTargetSize: CGSize, targetFullscreenExtent: CGSize, playbackScale: Float = 1.0){
         targetExtent = targetSize
         maskExtent = maskTargetSize
+        self.playbackScale = playbackScale
         self.targetFullscreenExtent = targetFullscreenExtent
         updateVertexBuffer(newExtent: targetSize)
         updateMaskVertices(maskVertexBuffer, maskTargetSize: maskTargetSize)
@@ -340,17 +342,18 @@ public class MaskMetalView: MTKView {
             points.append(overlayBuffer[3].position)
         }
 
-        let scale = scaleFactorTofit(points: points, bound: CGSize(width: 0.95, height: 0.95))
-        print("new scale: \(scale)")
-
+        var value = scaleFactorTofit(points: points, bound: CGSize(width: 0.95, height: 0.95))
+        print("new scale: \(value)")
+        
+        
         // Mask
-        preparemaskBufferFullscreen(scale: scale.scale * 1.06, offset: scale.offset )
+        preparemaskBufferFullscreen(scale: value.scale * 1.06 * (playbackScale ?? 1.0), offset: value.offset )
         
         // Experience Content
-        prepareExpBufferFullscreen(scale: scale.scale * 1.06, offset: scale.offset )
+        prepareExpBufferFullscreen(scale: value.scale * 1.06 * (playbackScale ?? 1.0), offset: value.offset )
         
         // setup fullscreen scale
-        prepareFullscreenImage(scale: scale.scale, offset: scale.offset)
+        prepareFullscreenImage(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)
         
     }
     
@@ -1098,10 +1101,10 @@ public class MaskMetalView: MTKView {
         let extent = targetExtent ?? CGSize(width: 1.0, height: 1.0)
         let point: Float = 0.5 // Adjust this value to change the size of the mask
         return [
-            Vertex(position: SIMD3<Float>(-point * Float(extent.width), -point * Float(extent.height), 0), texCoord: SIMD2<Float>(0, 1), textureIndex: 0),
-            Vertex(position: SIMD3<Float>(point * Float(extent.width), -point * Float(extent.height),0), texCoord: SIMD2<Float>(1, 1), textureIndex: 0),
-            Vertex(position: SIMD3<Float>(-point * Float(extent.width), point * Float(extent.height), 0), texCoord: SIMD2<Float>(0, 0), textureIndex: 0),
-            Vertex(position: SIMD3<Float>(point * Float(extent.width), point * Float(extent.height), 0), texCoord: SIMD2<Float>(1, 0), textureIndex: 0)
+            Vertex(position: SIMD3<Float>(-point * Float(extent.width), -point * Float(extent.height), 0), texCoord: SIMD2<Float>(0, 0), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(point * Float(extent.width), -point * Float(extent.height),0), texCoord: SIMD2<Float>(1, 0), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(-point * Float(extent.width), point * Float(extent.height), 0), texCoord: SIMD2<Float>(0, 1), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(point * Float(extent.width), point * Float(extent.height), 0), texCoord: SIMD2<Float>(1, 1), textureIndex: 0)
         ]
     }
     

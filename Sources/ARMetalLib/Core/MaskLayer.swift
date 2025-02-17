@@ -124,6 +124,7 @@ public final class MaskLayer: @unchecked Sendable {
         case .image: contentDescription = "Image"
         case .video: contentDescription = "Video"
         case .model: contentDescription = "3D Model"
+        case .videov2: contentDescription = "Video"
         }
         let textureDescription = texture != nil ? "Texture present" : "No texture"
         

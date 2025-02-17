@@ -54,14 +54,14 @@ public class LayerImage: @unchecked Sendable {
     
     public var avPlayer: AVPlayer? {
         get {
-            if case .video(let output, let player) = content {
+            if case .video(let output, let player, let videoType) = content {
                 return player
             }
             return nil
         }
         set {
-            if case .video(let output, _) = content {
-                content = .video(output, newValue ?? AVPlayer())
+            if case .video(let output, _, let videoType) = content {
+                content = .video(output, newValue ?? AVPlayer(), videoType)
             }
         }
     }
@@ -69,14 +69,14 @@ public class LayerImage: @unchecked Sendable {
     // Getter and setter for VideoOutput
     public var videoOutput: AVPlayerItemVideoOutput? {
         get {
-            if case .video(let output, let player) = content {
+            if case .video(let output, let player, let videoType) = content {
                 return output
             }
             return nil
         }
         set {
-            if case .video(_, let player) = content {
-                content = .video(newValue, player)
+            if case .video(_, let player, let videoType) = content {
+                content = .video(newValue, player, videoType)
             }
         }
     }
@@ -191,7 +191,7 @@ public class LayerImage: @unchecked Sendable {
 
 extension LayerImage {
     
-    public func setupVideoContent(with url: URL, device: MTLDevice, avplayer: AVPlayer?) {
+    @MainActor public func setupVideoContent(with url: URL, device: MTLDevice, avplayer: AVPlayer?, videoType: VideoType) {
         // Create texture cache synchronously
         if self.textureCache == nil {
             var newTextureCache: CVMetalTextureCache?
@@ -205,11 +205,10 @@ extension LayerImage {
             return
         }
         
-        DispatchQueue.main.async { [weak self] in
-            guard let strongSelf = self else {
-                print("Self is nil in async block")
-                return
-            }
+        // Create a local copy of the video type
+        let localVideoType = videoType
+        
+        @MainActor func configurePlayer(_ player: AVPlayer, _ videoType: VideoType) {
             
             // Create video output
             let videoPOutput = AVPlayerItemVideoOutput(pixelBufferAttributes: [
@@ -217,25 +216,22 @@ extension LayerImage {
                 kCVPixelBufferMetalCompatibilityKey as String: true
             ])
 
-//            if let out = strongSelf.videoOutput {
-//                player.currentItem?.add(out)
-//                print("ss: output added")
-//            }
-            strongSelf.videoOutput = videoPOutput
-            
+            self.videoOutput = videoPOutput
             player.currentItem?.add(videoPOutput)
-            
-            strongSelf.avPlayer = player
-            
-            strongSelf.content = .video(videoPOutput, player)
-            strongSelf.isVideoSetup = true
+            self.avPlayer = player
+            self.content = .video(videoPOutput, player, videoType)
+            self.isVideoSetup = true
             
             player.play()
         }
+        
+        // Execute on main queue
+        
+        configurePlayer(player, localVideoType)
     }
     
     private func updateVideoFrame(at time: CMTime) {
-        guard case .video(let videoOutput?, _) = content else { return }
+        guard case .video(let videoOutput?, _, let videoType) = content else { return }
         
         if let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) {
             self.videoPixelBuffer = pixelBuffer
@@ -273,7 +269,7 @@ extension LayerImage {
     
     func cleanup() {
         if let token = timeObserverToken,
-           case .video(_, let player) = content {
+           case .video(_, let player, let videoType) = content {
             player.removeTimeObserver(token)
         }
         timeObserverToken = nil

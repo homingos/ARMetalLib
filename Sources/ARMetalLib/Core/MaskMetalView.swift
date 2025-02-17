@@ -439,6 +439,8 @@ public class MaskMetalView: MTKView {
 //                CVMetalTextureCacheCreate(nil, nil, device,nil, &layerValues.textureCache)
             case .model(_):
                 break
+            case .videov2:
+                break
             }
             layerImages.append(layerValues)
         }
@@ -975,6 +977,8 @@ public class MaskMetalView: MTKView {
                     
                 case .model(_):
                     break
+                case .videov2:
+                    break
                 }
             }
             nonStencilEncoderExp.endEncoding()
@@ -1077,6 +1081,8 @@ public class MaskMetalView: MTKView {
                     }
                 case .model(let uRL):
                     // TODO: For 3d objects
+                    break
+                case .videov2:
                     break
                 }
             }

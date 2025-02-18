@@ -38,7 +38,8 @@ public class MaskMetalView: MTKView {
     private var testStencilState: MTLDepthStencilState?
     
 //    weak var viewControllerDelegate: ARMetalViewDelegate?
-    private var targetExtent: CGSize?
+    private var videoExtent: CGSize?
+    private var imageTargetExtent: CGSize?
     private var maskExtent: CGSize?
     private var playbackScale: Float? = 1.0
     private var targetFullscreenExtent: CGSize?
@@ -59,6 +60,7 @@ public class MaskMetalView: MTKView {
     private var nonStencilPipelineImage: MTLRenderPipelineState!
     private var nonStencilPipelineLayer: MTLRenderPipelineState!
     private var nonStencilImageBuffer: MTLBuffer!
+    private var overlayImageBuffer: MTLBuffer!
     
     private var isUpdatingLayers: Bool = false
     
@@ -111,6 +113,18 @@ public class MaskMetalView: MTKView {
             
         nonStencilImageBuffer = device?.makeBuffer(
             bytes: vertices,
+            length: vertices.count * MemoryLayout<Vertex>.stride,
+            options: .storageModeShared
+        )
+        let overlayVertices: [Vertex] = [
+            Vertex(position: SIMD3<Float>(-0.5, -0.5, 0.0), texCoord: SIMD2<Float>(0.0, 0.0), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(0.5, -0.5, 0.0), texCoord: SIMD2<Float>(1.0, 0.0), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(-0.5, 0.5, 0.0), texCoord: SIMD2<Float>(0.0, 1.0), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(0.5, 0.5, 0.0), texCoord: SIMD2<Float>(1.0, 1.0), textureIndex: 0)
+        ]
+        
+        overlayImageBuffer = device?.makeBuffer(
+            bytes: overlayVertices,
             length: vertices.count * MemoryLayout<Vertex>.stride,
             options: .storageModeShared
         )
@@ -294,14 +308,14 @@ public class MaskMetalView: MTKView {
 //        self.viewControllerDelegate = controller
 //    }
     /// Updated the Extent of the rendering Plane
-    public func setTargetSize(targetSize: CGSize, maskTargetSize: CGSize, targetFullscreenExtent: CGSize, playbackScale: Float = 1.0){
-        targetExtent = targetSize
+    public func setTargetSize(videoExtent: CGSize, maskTargetSize: CGSize, targetFullscreenExtent: CGSize, playbackScale: Float = 1.0, imageTargetExtent: CGSize){
+        self.videoExtent = videoExtent
         maskExtent = maskTargetSize
         self.playbackScale = playbackScale
         self.targetFullscreenExtent = targetFullscreenExtent
-        updateVertexBuffer(newExtent: targetSize)
+        updateVertexBuffer(newExtent: videoExtent)
         updateMaskVertices(maskVertexBuffer, maskTargetSize: maskTargetSize)
-        
+        updateOverlayVertices(targetSize: imageTargetExtent)
         // calculate the fullscreen Layer coordinates with mask for the scale factor to fit
         updateFullscreenCoordinates()
     }
@@ -398,6 +412,26 @@ public class MaskMetalView: MTKView {
                 print("Check this bbb y: \((-0.5 ) * scale * Float(newExtent.height))")
             }
         }
+    }
+    
+    private func updateOverlayVertices(targetSize: CGSize) {
+        let bufferPointer = overlayImageBuffer.contents().assumingMemoryBound(to: Vertex.self)
+        let newExtent = targetSize
+        let point: Float = 0.5
+        
+        bufferPointer[0].position.x = (-point) * Float(newExtent.width)
+        bufferPointer[0].position.y = (-point) * Float(newExtent.height)
+        
+        bufferPointer[1].position.x = (point) * Float(newExtent.width)
+        bufferPointer[1].position.y = (-point) * Float(newExtent.height)
+        
+        bufferPointer[2].position.x = (-point) * Float(newExtent.width)
+        bufferPointer[2].position.y = (point) * Float(newExtent.height)
+        
+        bufferPointer[3].position.x = (point) * Float(newExtent.width)
+        bufferPointer[3].position.y = (point) * Float(newExtent.height)
+        
+        print("Non-stencil vertices updated: \(bufferPointer[0].position) + \(newExtent)")
     }
     
     private func setLayerImage(layerImage: [Int: MaskLayer]){
@@ -709,7 +743,7 @@ public class MaskMetalView: MTKView {
             let xOffset = Float(layer.offset.x) // x-offset
             let yOffset = Float(layer.offset.y) // y-offset
             
-            let extent = targetExtent ?? CGSize(width: 1.0, height: 1.0)
+            let extent = videoExtent ?? CGSize(width: 1.0, height: 1.0)
             let scale = layer.scale
             
             let vertices: [Vertex] = [
@@ -898,7 +932,21 @@ public class MaskMetalView: MTKView {
             updateUniforms(uniformBuffer)
             nonStencilEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
             nonStencilEncoder.setFragmentSamplerState(samplerState, index: 0)
-
+            if imageTrackingStatus == .tracking {
+                // Render overlay in tracking mode
+                if let overlayLayer = layerImageDic[-1],
+                   let texture = overlayLayer.texture {  // Check for valid texture
+                    nonStencilEncoder.setVertexBuffer(overlayImageBuffer, offset: 0, index: 0)
+                    nonStencilEncoder.setFragmentTexture(texture, index: 0)
+                    nonStencilEncoder.drawIndexedPrimitives(
+                        type: .triangle,
+                        indexCount: 6,
+                        indexType: .uint16,
+                        indexBuffer: indexBuffers[0],
+                        indexBufferOffset: 0
+                    )
+                }
+            }
             if imageTrackingStatus == .trackingLost {
                 // Render overlay layer first (if exists and has valid texture)
                 if let overlayLayer = layerImageDic[-1],
@@ -1098,7 +1146,7 @@ public class MaskMetalView: MTKView {
     }
     
     private func createMaskVertices() -> [Vertex] {
-        let extent = targetExtent ?? CGSize(width: 1.0, height: 1.0)
+        let extent = videoExtent ?? CGSize(width: 1.0, height: 1.0)
         let point: Float = 0.5 // Adjust this value to change the size of the mask
         return [
             Vertex(position: SIMD3<Float>(-point * Float(extent.width), -point * Float(extent.height), 0), texCoord: SIMD2<Float>(0, 0), textureIndex: 0),
@@ -1226,7 +1274,7 @@ public class MaskMetalView: MTKView {
         let destPointer = drawBufferMaskFullscreen!.contents().assumingMemoryBound(to: Vertex.self)
         
         // Copy vertices with offset
-        let asp = Float(maskExtent!.width / maskExtent!.height) / Float(targetExtent!.width / targetExtent!.height)
+        let asp = Float(maskExtent!.width / maskExtent!.height) / Float(videoExtent!.width / videoExtent!.height)
 
         for i in 0..<4 {
             destPointer[i] = sourcePointer[i]
@@ -1273,7 +1321,7 @@ public class MaskMetalView: MTKView {
         let destPointer = drawBufferMaskFullscreen!.contents().assumingMemoryBound(to: Vertex.self)
         
         // Copy vertices with offset
-        let asp = Float(maskExtent!.width / maskExtent!.height) / Float(targetExtent!.width / targetExtent!.height)
+        let asp = Float(maskExtent!.width / maskExtent!.height) / Float(videoExtent!.width / videoExtent!.height)
 
         for i in 0..<4 {
             destPointer[i].position *= scale

@@ -37,12 +37,13 @@ public enum ParallaxContent {
 /// class for holding Parallax Layer images data
 /// Used in Metal AR
 public class LayerImage: @unchecked Sendable {
-    let id: Int
+    let id: String
     var textureCache: CVMetalTextureCache?
     let offset: SIMD3<Float>
     private(set) var content: ParallaxContent
     var texture: MTLTexture?
     var scale: Float
+    var alphaType: VideoType
     
     // Video-specific properties
     private var videoPixelBuffer: CVPixelBuffer?
@@ -114,20 +115,21 @@ public class LayerImage: @unchecked Sendable {
     }
     
     // Initializer with ParallaxContent
-    public init(id: Int,
+    public init(id: String,
                 offset: SIMD3<Float>,
                 content: ParallaxContent,
                 texture: MTLTexture? = nil,
-                scale: Float = 1.0) {
+                scale: Float = 1.0, alphaConfig: VideoType) {
         self.id = id
         self.offset = offset
         self.content = content
         self.texture = texture
         self.scale = scale
+        self.alphaType = alphaConfig
     }
     
     // Convenience initializer for images
-    public convenience init(id: Int,
+    public convenience init(id: String,
                             offset: SIMD3<Float>,
                             image: UIImage,
                             texture: MTLTexture? = nil,
@@ -136,11 +138,11 @@ public class LayerImage: @unchecked Sendable {
                   offset: offset,
                   content: .image(image),
                   texture: texture,
-                  scale: scale)
+                  scale: scale, alphaConfig: .normal)
     }
     
     // Convenience initializer for videos
-    public convenience init(id: Int,
+    public convenience init(id: String,
                             offset: SIMD3<Float>,
                             videoPlayerOutput: AVPlayerItemVideoOutput?,
                             avplayer: AVPlayer,
@@ -150,7 +152,7 @@ public class LayerImage: @unchecked Sendable {
                   offset: offset,
                   content: .video(videoPlayerOutput, avplayer, videoType),
                   texture: texture,
-                  scale: scale)
+                  scale: scale, alphaConfig: videoType)
     }
     
     public func setVideoPlayerOutput(_ output: AVPlayerItemVideoOutput, player: AVPlayer) {
@@ -191,7 +193,7 @@ public class LayerImage: @unchecked Sendable {
 
 extension LayerImage {
     
-    @MainActor public func setupVideoContent(with url: URL, device: MTLDevice, avplayer: AVPlayer?, videoType: VideoType) {
+    @MainActor public func setupVideoContent(device: MTLDevice, avplayer: AVPlayer?, videoType: VideoType) {
         // Create texture cache synchronously
         if self.textureCache == nil {
             var newTextureCache: CVMetalTextureCache?
@@ -221,12 +223,9 @@ extension LayerImage {
             self.avPlayer = player
             self.content = .video(videoPOutput, player, videoType)
             self.isVideoSetup = true
-            
-            player.play()
         }
         
         // Execute on main queue
-        
         configurePlayer(player, localVideoType)
     }
     

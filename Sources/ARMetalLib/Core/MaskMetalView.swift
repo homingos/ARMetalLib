@@ -1047,7 +1047,7 @@ public class MaskMetalView: MTKView {
             // TODO: Update this for supporting multi-Parallax
             updateUniforms(uniformBuffer)
             contentEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
-            let copiedLayerImages = layerImages.map { $0.copy() }
+//            let copiedLayerImages = layerImages.map { $0.copy() }
             //        let newOffset = viewControllerDelegate?.willUpdateDraw(layerImages: copiedLayerImages)
             let newOffset:[SIMD3<Float>]? = nil
             

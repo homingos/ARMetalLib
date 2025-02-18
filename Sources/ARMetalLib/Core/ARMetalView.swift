@@ -49,6 +49,7 @@ public class ARMetalView: MTKView {
     private var renderPipelineState: MTLRenderPipelineState!
     private var vertexBuffers: [MTLBuffer] = []
     private var indexBuffers: [MTLBuffer] = []
+    private var modeBuffers: [MTLBuffer] = []
     private var maskVertexBuffer: MTLBuffer!
     private var uniformBuffer: MTLBuffer!
     private var samplerState: MTLSamplerState?
@@ -58,7 +59,7 @@ public class ARMetalView: MTKView {
     private var projectionMatrix: simd_float4x4?
     
     public private(set) var layerImages: [LayerImage] = []
-    public private(set) var layerImageDic: [Int: LayerImage] = [:]
+    public private(set) var layerImageDic: [String: LayerImage] = [:]
     
     private var stencilState: MTLDepthStencilState?
     private var maskRenderPipelineState: MTLRenderPipelineState!
@@ -67,7 +68,10 @@ public class ARMetalView: MTKView {
     private var testStencilState: MTLDepthStencilState?
     
     weak var viewControllerDelegate: ARMetalViewDelegate?
-    private var targetExtent: CGSize?
+    private var videoExtent: CGSize?
+    private var maskExtent: CGSize?
+    private var targetImageExtent: CGSize?
+    private var maskOffset: SIMD3<Float>?
     
     private var isBufferUpdated: Bool = false
     private var maskMode: MaskMode = .none
@@ -103,8 +107,9 @@ public class ARMetalView: MTKView {
         switch maskMode {
         case .none:
             break
-        case .Image(let image, let offset ):
+        case .Image(let image, let offset):
             updateMaskImage(image)
+            maskOffset = offset
         case .VideoPlayer(let videoOutput):
             // TODO: Mask as a video
             break
@@ -112,7 +117,7 @@ public class ARMetalView: MTKView {
     }
     
     /// Use for updating and setting the LayerImage
-    public func updateLayerImage(layerImage: [Int: LayerImage]){
+    public func updateLayerImage(layerImage: [String: LayerImage]){
         self.layerImageDic = layerImage
         print("Recieved layerImage: \(layerImage)")
         setLayerImage(layerImage: layerImage)
@@ -123,9 +128,11 @@ public class ARMetalView: MTKView {
     }
     
     /// Updated the Extent of the rendering Plane
-    public func setTargetSize(targetSize: CGSize){
-        targetExtent = targetSize
-        updateVertexBuffer(newExtent: targetSize)
+    public func setTargetSize(videoSize: CGSize, maskTargetSize: CGSize, targetImageExtent: CGSize){
+        videoExtent = videoSize
+        maskExtent = maskTargetSize
+        self.targetImageExtent = targetImageExtent
+        updateVertexBuffer(newExtent: videoSize)
         updateMaskVertices(maskVertexBuffer)
     }
     
@@ -142,34 +149,37 @@ public class ARMetalView: MTKView {
                 let vertexBuffer = vertexBuffers[index]
                 let bufferPointer = vertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
                 
-                let zOffset = Float(layer.offset.z) * 0.5
-                let xOffset = Float(layer.offset.x)
-                let yOffset = Float(layer.offset.y)
+                let newOffset = layer.offset + (maskOffset ?? .zero)
+                
+                let zOffset = Float(newOffset.z) * Float(targetImageExtent?.width ?? 1.0)
+                let xOffset = Float(newOffset.x) * Float(targetImageExtent?.width ?? 1.0)
+                let yOffset = Float(newOffset.y) * Float(targetImageExtent?.height ?? 1.0)
+                
                 let scale = layer.scale
                 print("offset: \(layer.offset)")
                 // Update x and z components (width and height) of each vertex
                 // Vertex 0
-                bufferPointer[0].position.x = (-0.5 + xOffset) * scale * Float(newExtent.width)
-                bufferPointer[0].position.y = (-0.5 + yOffset) * scale * Float(newExtent.height)
+                bufferPointer[0].position.x = (-0.5 ) * scale * Float(newExtent.width) + xOffset
+                bufferPointer[0].position.y = (-0.5) * scale * Float(newExtent.height) + yOffset
                 
                 // Vertex 1
-                bufferPointer[1].position.x = (0.5 + xOffset) * scale * Float(newExtent.width)
-                bufferPointer[1].position.y = (-0.5 + yOffset) * scale * Float(newExtent.height)
+                bufferPointer[1].position.x = (0.5 ) * scale * Float(newExtent.width) + xOffset
+                bufferPointer[1].position.y = (-0.5) * scale * Float(newExtent.height)  + yOffset
                 
                 // Vertex 2
-                bufferPointer[2].position.x = (-0.5 + xOffset) * scale * Float(newExtent.width)
-                bufferPointer[2].position.y = (0.5 + yOffset) * scale * Float(newExtent.height)
+                bufferPointer[2].position.x = (-0.5) * scale * Float(newExtent.width) + xOffset
+                bufferPointer[2].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
                 
                 // Vertex 3
-                bufferPointer[3].position.x = (0.5 + xOffset) * scale * Float(newExtent.width)
-                bufferPointer[3].position.y = (0.5 + yOffset) * scale * Float(newExtent.height)
+                bufferPointer[3].position.x = (0.5 ) * scale * Float(newExtent.width) + xOffset
+                bufferPointer[3].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
                 
                 print("Updated vertices for layer \(layer.id): \(bufferPointer[0].position)")
             }
         }
     }
     
-    private func setLayerImage(layerImage: [Int: LayerImage]){
+    private func setLayerImage(layerImage: [String: LayerImage]){
         guard let device else { return }
         
         let textureLoader = MTKTextureLoader(device: device)
@@ -401,7 +411,7 @@ public class ARMetalView: MTKView {
         do {
             let library = try device.makeDefaultLibrary(bundle: Bundle.module)
             guard let vertexFunction = library.makeFunction(name: "vertexShader"),
-                  let fragmentFunction = library.makeFunction(name: "fragmentShader") else {
+                  let fragmentFunction = library.makeFunction(name: "dynamicFragmentShader") else {
                 print("Failed to create shader functions")
                 return
             }
@@ -460,6 +470,8 @@ public class ARMetalView: MTKView {
         
         vertexBuffers.removeAll()
         indexBuffers.removeAll()
+        modeBuffers.removeAll()
+        
         defer {
             isBufferUpdated = true
             print("Layer vertices setup completed")
@@ -467,11 +479,11 @@ public class ARMetalView: MTKView {
         
         for (index, layer) in layerImages.enumerated() {
             // Calculate offset based on layer priority
-            let zOffset =  Float(layer.offset.z) * 0.1 // Small z-offset to prevent z-fighting
+            let zOffset =  Float(layer.offset.z) * Float(targetImageExtent?.width ?? 1.0) // Small z-offset to prevent z-fighting
             let xOffset =  Float(layer.offset.x) // Small x-offset to prevent z-fighting
             let yOffset =  Float(layer.offset.y) // Small y-offset to prevent z-fighting
             
-            let extent = targetExtent ?? CGSize(width: 1.0, height: 1.0)
+            let extent = videoExtent ?? CGSize(width: 1.0, height: 1.0)
             let scale = layer.scale
             
             let vertices: [Vertex] = [
@@ -480,13 +492,26 @@ public class ARMetalView: MTKView {
                 Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), zOffset) , texCoord: SIMD2<Float>(0.0, 0.0), textureIndex: UInt32(index)),
                 Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), zOffset), texCoord: SIMD2<Float>(1.0, 0.0), textureIndex: UInt32(index))
             ]
-            print("for \(layer.id): offset is : offset is : \(vertices)")
+            print("for \(layer.id): offset is : offset is : \(-zOffset)")
             
             let indices: [UInt16] = [
                 0, 1, 2,  // First triangle
                 2, 1, 3   // Second triangle
             ]
+            let alphaType = layer.alphaType
             
+            var mode: Int32 = 0
+            switch alphaType {
+            case .normal:
+                mode = 0
+            case .alpha(config: let config):
+                switch config {
+                case .LR:
+                    mode = 1
+                case .TD:
+                    mode = 2
+                }
+            }
             if let vertexBuffer = device?.makeBuffer(
                 bytes: vertices,
                 length: vertices.count * MemoryLayout<Vertex>.stride,
@@ -501,6 +526,14 @@ public class ARMetalView: MTKView {
                 options: .storageModeShared
             ) {
                 indexBuffers.append(indexBuffer)
+            }
+            
+            if let modeBuffer = device?.makeBuffer(
+                bytes: &mode,
+                length: MemoryLayout<Int32>.stride,
+                options: .storageModeShared
+            ) {
+                modeBuffers.append(modeBuffer)
             }
             print("Created vertices for layer ID: \(layer.id)")
         }
@@ -603,7 +636,7 @@ public class ARMetalView: MTKView {
         switch maskMode {
         case .none:
             break
-        case .Image:
+        case .Image(let uiImage, let offset):
             maskEncoder.setFragmentTexture(maskTexture, index: 8)
             maskEncoder.setFragmentSamplerState(samplerState, index: 0)
         case .VideoPlayer:
@@ -638,7 +671,7 @@ public class ARMetalView: MTKView {
                 if let texture = currentLayer.texture {
                     contentEncoder.setVertexBuffer(vertexBuffers[i], offset: 0, index: 0)
                     contentEncoder.setFragmentTexture(texture, index: i)
-                    
+                    contentEncoder.setFragmentBuffer(modeBuffers[i], offset: 0, index: 1)
                     contentEncoder.drawIndexedPrimitives(
                         type: .triangle,
                         indexCount: 6,
@@ -669,7 +702,11 @@ public class ARMetalView: MTKView {
                         let metalTexture = CVMetalTextureGetTexture(texture)
                         contentEncoder.setVertexBuffer(vertexBuffers[i], offset: 0, index: 0)
                         contentEncoder.setFragmentTexture(metalTexture, index: i)
-                        
+                        let alphaType = layerImages[i].alphaType
+                        var mode: Int32 = 1
+//                        contentEncoder.setFragmentBytes(&mode, length: MemoryLayout<Int32>.size, index: 1)
+                        contentEncoder.setFragmentBuffer(modeBuffers[i], offset: 0, index: 1)
+
                         contentEncoder.drawIndexedPrimitives(
                             type: .triangle,
                             indexCount: 6,
@@ -749,7 +786,7 @@ public class ARMetalView: MTKView {
     }
     
     private func createMaskVertices() -> [Vertex] {
-        let extent = targetExtent ?? CGSize(width: 1.0, height: 1.0)
+        let extent = videoExtent ?? CGSize(width: 1.0, height: 1.0)
         let point: Float = 0.5 // Adjust this value to change the size of the mask
         return [
             Vertex(position: SIMD3<Float>(-point * Float(extent.width), -point * Float(extent.height), 0), texCoord: SIMD2<Float>(0, 1), textureIndex: 0),
@@ -761,25 +798,28 @@ public class ARMetalView: MTKView {
     
     private func updateMaskVertices(_ buffer: MTLBuffer) {
         let bufferPointer = buffer.contents().assumingMemoryBound(to: Vertex.self)
-        let newExtent = targetExtent ?? CGSize(width: 1.0, height: 1.0)
+        let newExtent = maskExtent ?? CGSize(width: 1.0, height: 1.0)
         let point: Float = 0.5
+        
+        let xOffset = (maskOffset?.x ?? 0.0) * Float(targetImageExtent?.width ?? 0.0)
+        let yOffset = (maskOffset?.y ?? 0.0) * Float(targetImageExtent?.height ?? 0.0)
         
         // Update x and z components (width and height) of each vertex
         // Vertex 0
-        bufferPointer[0].position.x = (-point) * Float(newExtent.width)
-        bufferPointer[0].position.y = (-point) * Float(newExtent.height)
+        bufferPointer[0].position.x = (-point) * Float(newExtent.width) + Float(xOffset)
+        bufferPointer[0].position.y = (-point) * Float(newExtent.height) + Float(yOffset)
         
         // Vertex 1
-        bufferPointer[1].position.x = (point) * Float(newExtent.width)
-        bufferPointer[1].position.y = (-point) * Float(newExtent.height)
+        bufferPointer[1].position.x = (point) * Float(newExtent.width) + Float(xOffset)
+        bufferPointer[1].position.y = (-point) * Float(newExtent.height) + Float(yOffset)
         
         // Vertex 2
-        bufferPointer[2].position.x = (-point) * Float(newExtent.width)
-        bufferPointer[2].position.y = (point) * Float(newExtent.height)
+        bufferPointer[2].position.x = (-point) * Float(newExtent.width) + Float(xOffset)
+        bufferPointer[2].position.y = (point) * Float(newExtent.height) + Float(yOffset)
         
         // Vertex 3
-        bufferPointer[3].position.x = (point) * Float(newExtent.width)
-        bufferPointer[3].position.y = (point) * Float(newExtent.height)
+        bufferPointer[3].position.x = (point) * Float(newExtent.width) + Float(xOffset)
+        bufferPointer[3].position.y = (point) * Float(newExtent.height) + Float(yOffset)
         print("Mask vertices updated: \(bufferPointer[0].position)")
     }
     
@@ -817,8 +857,14 @@ public class ARMetalView: MTKView {
 
 extension ARMetalView {
     
-    public func setupVideoContent(for layer: LayerImage, with url: URL, avplayer: AVPlayer?, videoType: VideoType) {
+    public func setupVideoContent(for layer: LayerImage, avplayer: AVPlayer? = nil) {
         guard let device = self.device else { return }
-        layer.setupVideoContent(with: url, device: device, avplayer: avplayer, videoType: videoType)
+        let extringavPlayer = layer.avPlayer
+        let videoType = layer.alphaType
+        if let extringavPlayer {
+            layer.setupVideoContent(device: device, avplayer: extringavPlayer, videoType: videoType)
+        } else {
+            layer.setupVideoContent(device: device, avplayer: avplayer, videoType: videoType)
+        }
     }
 }

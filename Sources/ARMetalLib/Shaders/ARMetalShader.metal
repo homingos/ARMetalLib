@@ -111,6 +111,35 @@ fragment float4 fragmentShaderSplitTextureTD(VertexOut in [[stage_in]],
     return textureColor;
 }
 
+fragment float4 dynamicFragmentShader(VertexOut in [[stage_in]],
+                                      array<texture2d<float>, 8> textures [[texture(0)]],
+                                      sampler textureSampler [[sampler(0)]],
+                                      constant int &mode [[buffer(1)]]) {
+    float4 textureColor;
+
+    if (mode == 1) { // LR mode
+        float2 textureCoordinates = in.texCoord;
+        textureCoordinates.x = textureCoordinates.x / 2.0;
+
+        textureColor = textures[in.textureIndex].sample(textureSampler, textureCoordinates);
+        float4 alphaColor = textures[in.textureIndex].sample(textureSampler, float2(0.5, 0.0) + textureCoordinates);
+        textureColor.a = alphaColor.r;
+    }
+    else if (mode == 2) { // TD mode
+        float2 textureCoordinates = in.texCoord;
+        textureCoordinates.y = textureCoordinates.y / 2.0;
+
+        textureColor = textures[in.textureIndex].sample(textureSampler, textureCoordinates);
+        float4 alphaColor = textures[in.textureIndex].sample(textureSampler, float2(0.0, 0.5) + textureCoordinates);
+        textureColor.a = alphaColor.r;
+    }
+    else { // Normal mode
+        textureColor = textures[in.textureIndex].sample(textureSampler, in.texCoord);
+    }
+
+    return textureColor;
+}
+
 // Existing main fragment shader
 fragment float4 fragmentShader(VertexOut in [[stage_in]], array<texture2d<float>, 8> textures [[texture(0)]], sampler textureSampler [[sampler(0)]]) {
     float4 color = textures[in.textureIndex].sample(textureSampler, in.texCoord);

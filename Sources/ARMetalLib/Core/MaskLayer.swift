@@ -100,14 +100,14 @@ public final class MaskLayer: @unchecked Sendable {
                   scale: scale, useStencil: useStencil)
     }
     
-    func copy() -> LayerImage {
-        return LayerImage(id: id,
-                          offset: offset,
-                          content: content,
-                          texture: texture,
-                          scale: scale)
-    }
-    
+//    func copy() -> LayerImage {
+//        return LayerImage(id: id,
+//                          offset: offset,
+//                          content: content,
+//                          texture: texture,
+//                          scale: scale)
+//    }
+//    
     public func setVideoPlayerOutput(_ output: AVPlayerItemVideoOutput, player: AVPlayer) {
         if case .video(_, _, let videoType) = content {
             content = .video(output, player, videoType)

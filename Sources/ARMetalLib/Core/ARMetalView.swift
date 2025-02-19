@@ -156,7 +156,6 @@ public class ARMetalView: MTKView {
                 let yOffset = Float(newOffset.y) * Float(targetImageExtent?.height ?? 1.0)
                 
                 let scale = layer.scale
-                print("offset: \(layer.offset)")
                 // Update x and z components (width and height) of each vertex
                 // Vertex 0
                 bufferPointer[0].position.x = (-0.5 ) * scale * Float(newExtent.width) + xOffset

@@ -310,6 +310,7 @@ public class MaskMetalView: MTKView {
     /// Updated the Extent of the rendering Plane
     public func setTargetSize(videoExtent: CGSize, maskTargetSize: CGSize, targetFullscreenExtent: CGSize, playbackScale: Float = 1.0, imageTargetExtent: CGSize){
         self.videoExtent = videoExtent
+        self.imageTargetExtent = imageTargetExtent
         maskExtent = maskTargetSize
         self.playbackScale = playbackScale
         self.targetFullscreenExtent = targetFullscreenExtent
@@ -341,11 +342,11 @@ public class MaskMetalView: MTKView {
         }
         
         // TODO: Target image to the points
-        let maksBuffer = drawBufferMaskFullscreen?.contents().assumingMemoryBound(to: Vertex.self)
-        points.append(maksBuffer![0].position)
-        points.append(maksBuffer![1].position)
-        points.append(maksBuffer![2].position)
-        points.append(maksBuffer![3].position)
+//        let maksBuffer = drawBufferMaskFullscreen?.contents().assumingMemoryBound(to: Vertex.self)
+//        points.append(maksBuffer![0].position)
+//        points.append(maksBuffer![1].position)
+//        points.append(maksBuffer![2].position)
+//        points.append(maksBuffer![3].position)
         
         // Adding ovlerlay image
         if let nonStencilImageBuffer {
@@ -384,9 +385,10 @@ public class MaskMetalView: MTKView {
                 let vertexBuffer = vertexBuffers[index]
                 let bufferPointer = vertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
                 
-                let zOffset = Float(layer.offset.z) * 0.5
-                let xOffset = Float(layer.offset.x)
-                let yOffset = Float(layer.offset.y)
+                let aspectRatio: Float = 1.0
+                let zOffset = Float(layer.offset.z) * Float(imageTargetExtent?.width ?? 1.0)
+                let xOffset = Float(layer.offset.x) * Float(imageTargetExtent?.width ?? 1.0)
+                let yOffset = Float(layer.offset.y) * Float(imageTargetExtent?.height ?? 1.0)
                 let scale = layer.scale
                 
                 // Update x and z components (width and height) of each vertex
@@ -436,6 +438,7 @@ public class MaskMetalView: MTKView {
     
     private func setLayerImage(layerImage: [Int: MaskLayer]){
         guard let device else { return }
+        print("check it out updating overlay mask ")
         isUpdatingLayers = true
         defer {
             isUpdatingLayers = false
@@ -1173,20 +1176,23 @@ public class MaskMetalView: MTKView {
             break
         }
         
-        bufferPointer[0].position.x = (-point + value.x) * Float(newExtent.width)
-        bufferPointer[0].position.y = (-point + value.y) * Float(newExtent.height)
+        let xOffset = (maskOffset.x ?? 0.0) * Float(imageTargetExtent?.width ?? 0.0)
+        let yOffset = (maskOffset.y ?? 0.0) * Float(imageTargetExtent?.height ?? 0.0)
+        
+        bufferPointer[0].position.x = (-point) * Float(newExtent.width) + xOffset
+        bufferPointer[0].position.y = (-point) * Float(newExtent.height) + yOffset
         
         // Vertex 1
-        bufferPointer[1].position.x = (point + value.x) * Float(newExtent.width)
-        bufferPointer[1].position.y = (-point + value.y) * Float(newExtent.height)
+        bufferPointer[1].position.x = (point) * Float(newExtent.width) + xOffset
+        bufferPointer[1].position.y = (-point) * Float(newExtent.height) + yOffset
         
         // Vertex 2
-        bufferPointer[2].position.x = (-point + value.x) * Float(newExtent.width)
-        bufferPointer[2].position.y = (point + value.y) * Float(newExtent.height)
+        bufferPointer[2].position.x = (-point) * Float(newExtent.width) + xOffset
+        bufferPointer[2].position.y = (point) * Float(newExtent.height) + yOffset
         
         // Vertex 3
-        bufferPointer[3].position.x = (point + value.x) * Float(newExtent.width)
-        bufferPointer[3].position.y = (point + value.y) * Float(newExtent.height)
+        bufferPointer[3].position.x = (point) * Float(newExtent.width) + xOffset
+        bufferPointer[3].position.y = (point) * Float(newExtent.height) + yOffset
         
         print("Mask vertices updated: \(bufferPointer[0].position) + \(newExtent)")
     }

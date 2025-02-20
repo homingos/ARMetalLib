@@ -151,77 +151,70 @@ public class ARMetalView: MTKView {
                 let bufferPointer = vertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
                 
                 let newOffset = layer.offset + (maskOffset ?? .zero)
-                var asp: CGFloat = 1.0
-                let zOffset = Float(newOffset.z) * Float(targetImageExtent?.width ?? 1.0)
+                var asp: Float = 1.0
                 let xOffset = Float(newOffset.x) * Float(targetImageExtent?.width ?? 1.0)
                 let yOffset = Float(newOffset.y) * Float(targetImageExtent?.height ?? 1.0)
                 let newExtent = targetImageExtent ?? CGSizeMake(1.0, 1.0)
                 let scale = layer.scale
-                let imageAsp = newExtent.width/newExtent.height
-                let factor = imageAsp/asp
-                
-                
                 switch layer.content{
                     
                 case .image(_):
-                    break
+                    // Update x and z components (width and height) of each vertex
+                    // Vertex 0
+                    bufferPointer[0].position.x = (-0.5 ) * scale * Float(newExtent.width) + xOffset
+                    bufferPointer[0].position.y = (-0.5) * scale * Float(newExtent.height) + yOffset
+                    
+                    // Vertex 1
+                    bufferPointer[1].position.x = (0.5 ) * scale * Float(newExtent.width) + xOffset
+                    bufferPointer[1].position.y = (-0.5) * scale * Float(newExtent.height)  + yOffset
+                    
+                    // Vertex 2
+                    bufferPointer[2].position.x = (-0.5) * scale * Float(newExtent.width) + xOffset
+                    bufferPointer[2].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
+                    
+                    // Vertex 3
+                    bufferPointer[3].position.x = (0.5 ) * scale * Float(newExtent.width) + xOffset
+                    bufferPointer[3].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
                 case .video(_, let player, let videoType):
                     if let size = player.currentItem?.presentationSize {
                         switch videoType {
                             
                         case .normal:
-                            asp = size.width/size.height
+                            asp = Float(size.width/size.height)
                         case .alpha(config: let config):
                             switch config {
                                 
                             case .LR:
-                                asp = (size.width / 2) / size.height
+                                asp = Float((size.width / 2) / size.height)
                             case .TD:
-                                asp = size.width / (size.height / 2)
+                                asp = Float(size.width / (size.height / 2))
                             }
                         }
+                        asp = 1 / asp
+                        // Update x and z components (width and height) of each vertex
                         // Vertex 0
-                        bufferPointer[0].position.x = (-0.5 ) * scale * Float(newExtent.width * factor) + xOffset
-                        bufferPointer[0].position.y = (-0.5) * scale * Float(newExtent.height) + yOffset
+                        bufferPointer[0].position.x = (-0.5 ) * scale * 1.0 + xOffset
+                        bufferPointer[0].position.y = ((-0.5) * scale * asp) + yOffset
                         
                         // Vertex 1
-                        bufferPointer[1].position.x = (0.5 ) * scale * Float(newExtent.width * factor) + xOffset
-                        bufferPointer[1].position.y = (-0.5) * scale * Float(newExtent.height)  + yOffset
+                        bufferPointer[1].position.x = (0.5 ) * scale * 1.0 + xOffset
+                        bufferPointer[1].position.y = (-0.5) * scale * asp  + yOffset
                         
                         // Vertex 2
-                        bufferPointer[2].position.x = (-0.5) * scale * Float(newExtent.width * factor) + xOffset
-                        bufferPointer[2].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
+                        bufferPointer[2].position.x = (-0.5) * scale * 1.0 + xOffset
+                        bufferPointer[2].position.y = (0.5 ) * scale * asp + yOffset
                         
                         // Vertex 3
-                        bufferPointer[3].position.x = (0.5 ) * scale * Float(newExtent.width * factor) + xOffset
-                        bufferPointer[3].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
-                        return
-                        print("the size of the video \(asp)")
+                        bufferPointer[3].position.x = (0.5 ) * scale * 1.0 + xOffset
+                        bufferPointer[3].position.y = (0.5 ) * scale * asp + yOffset
+                        
+                        print("Updated vertices for layer \(layer.id): \(bufferPointer[0].position)")
                     }
                 case .model(_):
                     break
                 case .videov2:
                     break
                 }
-                print("offset:  check \(layer.offset)")
-                // Update x and z components (width and height) of each vertex
-                // Vertex 0
-                bufferPointer[0].position.x = (-0.5 ) * scale * Float(newExtent.width) + xOffset
-                bufferPointer[0].position.y = (-0.5) * scale * Float(newExtent.height) + yOffset
-                
-                // Vertex 1
-                bufferPointer[1].position.x = (0.5 ) * scale * Float(newExtent.width) + xOffset
-                bufferPointer[1].position.y = (-0.5) * scale * Float(newExtent.height)  + yOffset
-                
-                // Vertex 2
-                bufferPointer[2].position.x = (-0.5) * scale * Float(newExtent.width) + xOffset
-                bufferPointer[2].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
-                
-                // Vertex 3
-                bufferPointer[3].position.x = (0.5 ) * scale * Float(newExtent.width) + xOffset
-                bufferPointer[3].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
-                
-                print("Updated vertices for layer \(layer.id): \(bufferPointer[0].position)")
             }
         }
     }

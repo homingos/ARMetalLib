@@ -539,7 +539,6 @@ public class ARMetalView: MTKView {
                 Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), zOffset) , texCoord: SIMD2<Float>(0.0, 0.0), textureIndex: UInt32(index)),
                 Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), zOffset), texCoord: SIMD2<Float>(1.0, 0.0), textureIndex: UInt32(index))
             ]
-            print("for \(layer.id): offset is : offset is : \(-zOffset)")
             
             let indices: [UInt16] = [
                 0, 1, 2,  // First triangle

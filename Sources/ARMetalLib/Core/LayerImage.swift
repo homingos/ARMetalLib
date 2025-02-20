@@ -40,7 +40,7 @@ public class LayerImage: @unchecked Sendable {
     let id: String
     var textureCache: CVMetalTextureCache?
     let offset: SIMD3<Float>
-    private(set) var content: ParallaxContent
+    var content: ParallaxContent
     var texture: MTLTexture?
     var scale: Float
     var alphaType: VideoType

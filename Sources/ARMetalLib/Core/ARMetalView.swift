@@ -132,12 +132,12 @@ public class ARMetalView: MTKView {
         videoExtent = videoSize
         maskExtent = maskTargetSize
         self.targetImageExtent = targetImageExtent
-        updateVertexBuffer(newExtent: videoSize)
+        updateVertexBuffer()
         updateMaskVertices(maskVertexBuffer)
     }
     
-    private func updateVertexBuffer(newExtent: CGSize) {
-        print("111: updateLayerVertices called with extent: \(newExtent)")
+    public func updateVertexBuffer() {
+        print("111: updateLayerVertices called with extent: \(targetImageExtent)")
         isBufferUpdated = false
         defer {
             isBufferUpdated = true
@@ -146,16 +146,64 @@ public class ARMetalView: MTKView {
         
         for (index, layer) in layerImages.enumerated() {
             if index < vertexBuffers.count {
+                
                 let vertexBuffer = vertexBuffers[index]
                 let bufferPointer = vertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
                 
                 let newOffset = layer.offset + (maskOffset ?? .zero)
-                
+                var asp: CGFloat = 1.0
                 let zOffset = Float(newOffset.z) * Float(targetImageExtent?.width ?? 1.0)
                 let xOffset = Float(newOffset.x) * Float(targetImageExtent?.width ?? 1.0)
                 let yOffset = Float(newOffset.y) * Float(targetImageExtent?.height ?? 1.0)
-                
+                let newExtent = targetImageExtent ?? CGSizeMake(1.0, 1.0)
                 let scale = layer.scale
+                let imageAsp = newExtent.width/newExtent.height
+                let factor = imageAsp/asp
+                
+                
+                switch layer.content{
+                    
+                case .image(_):
+                    break
+                case .video(_, let player, let videoType):
+                    if let size = player.currentItem?.presentationSize {
+                        switch videoType {
+                            
+                        case .normal:
+                            asp = size.width/size.height
+                        case .alpha(config: let config):
+                            switch config {
+                                
+                            case .LR:
+                                asp = (size.width / 2) / size.height
+                            case .TD:
+                                asp = size.width / (size.height / 2)
+                            }
+                        }
+                        // Vertex 0
+                        bufferPointer[0].position.x = (-0.5 ) * scale * Float(newExtent.width * factor) + xOffset
+                        bufferPointer[0].position.y = (-0.5) * scale * Float(newExtent.height) + yOffset
+                        
+                        // Vertex 1
+                        bufferPointer[1].position.x = (0.5 ) * scale * Float(newExtent.width * factor) + xOffset
+                        bufferPointer[1].position.y = (-0.5) * scale * Float(newExtent.height)  + yOffset
+                        
+                        // Vertex 2
+                        bufferPointer[2].position.x = (-0.5) * scale * Float(newExtent.width * factor) + xOffset
+                        bufferPointer[2].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
+                        
+                        // Vertex 3
+                        bufferPointer[3].position.x = (0.5 ) * scale * Float(newExtent.width * factor) + xOffset
+                        bufferPointer[3].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
+                        return
+                        print("the size of the video \(asp)")
+                    }
+                case .model(_):
+                    break
+                case .videov2:
+                    break
+                }
+                print("offset:  check \(layer.offset)")
                 // Update x and z components (width and height) of each vertex
                 // Vertex 0
                 bufferPointer[0].position.x = (-0.5 ) * scale * Float(newExtent.width) + xOffset
@@ -500,6 +548,9 @@ public class ARMetalView: MTKView {
             let alphaType = layer.alphaType
             
             var mode: Int32 = 0
+            // 0 - normal
+            // 1 - LR
+            // 2 - TD
             switch alphaType {
             case .normal:
                 mode = 0
@@ -681,7 +732,9 @@ public class ARMetalView: MTKView {
                 }
             case .video(let playerItemVideoOutput, let avplayer, _):
                 let time = avplayer.currentTime()
+                
                 if let videoOutput = playerItemVideoOutput, let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil), let textureCache = currentLayer.textureCache {
+                    let asp = avplayer.currentItem?.presentationSize
                     
                     var cvTexture: CVMetalTexture?
                     let width = CVPixelBufferGetWidth(pixelBuffer)

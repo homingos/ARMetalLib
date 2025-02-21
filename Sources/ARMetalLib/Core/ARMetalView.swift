@@ -135,8 +135,65 @@ public class ARMetalView: MTKView {
         updateVertexBuffer()
         updateMaskVertices(maskVertexBuffer)
     }
-    
-    public func updateVertexBuffer() {
+    public func updateVideoVertex(planeID: String){
+        for (index, layer) in layerImages.enumerated(){
+            if index < vertexBuffers.count {
+                if layer.id == planeID {
+                    let vertexBuffer = vertexBuffers[index]
+                    let bufferPointer = vertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
+                    
+                    let newOffset = layer.offset + (maskOffset ?? .zero)
+                    var asp: Float = 1.0
+                    let xOffset = Float(newOffset.x) * Float(targetImageExtent?.width ?? 1.0)
+                    let yOffset = Float(newOffset.y) * Float(targetImageExtent?.height ?? 1.0)
+                    let newExtent = targetImageExtent ?? CGSizeMake(1.0, 1.0)
+                    let scale = layer.scale
+                    
+                    switch layer.content{
+                    case .video(_, let player, let videoType):
+                        if let size = player.currentItem?.presentationSize {
+                            switch videoType {
+                                
+                            case .normal:
+                                asp = Float(size.width/size.height)
+                            case .alpha(config: let config):
+                                switch config {
+                                    
+                                case .LR:
+                                    asp = Float((size.width / 2) / size.height)
+                                case .TD:
+                                    asp = Float(size.width / (size.height / 2))
+                                }
+                            }
+                            asp = 1 / asp
+                            // Update x and z components (width and height) of each vertex
+                            // Vertex 0
+                            bufferPointer[0].position.x = (-0.5 ) * scale * 1.0 + xOffset
+                            bufferPointer[0].position.y = ((-0.5) * scale * asp) + yOffset
+                            
+                            // Vertex 1
+                            bufferPointer[1].position.x = (0.5 ) * scale * 1.0 + xOffset
+                            bufferPointer[1].position.y = (-0.5) * scale * asp  + yOffset
+                            
+                            // Vertex 2
+                            bufferPointer[2].position.x = (-0.5) * scale * 1.0 + xOffset
+                            bufferPointer[2].position.y = (0.5 ) * scale * asp + yOffset
+                            
+                            // Vertex 3
+                            bufferPointer[3].position.x = (0.5 ) * scale * 1.0 + xOffset
+                            bufferPointer[3].position.y = (0.5 ) * scale * asp + yOffset
+                            
+                            print("Updated vertices for video layer when ready \(layer.id): \(bufferPointer[0].position)")
+                        }
+                    default:
+                        break
+                        
+                    }
+                }
+            }
+        }
+    }
+    private func updateVertexBuffer() {
         print("111: updateLayerVertices called with extent: \(targetImageExtent)")
         isBufferUpdated = false
         defer {

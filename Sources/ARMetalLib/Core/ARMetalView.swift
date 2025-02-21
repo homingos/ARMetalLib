@@ -833,10 +833,10 @@ public class ARMetalView: MTKView {
         let extent = videoExtent ?? CGSize(width: 1.0, height: 1.0)
         let point: Float = 0.5 // Adjust this value to change the size of the mask
         return [
-            Vertex(position: SIMD3<Float>(-point * Float(extent.width), -point * Float(extent.height), 0), texCoord: SIMD2<Float>(0, 1), textureIndex: 0),
-            Vertex(position: SIMD3<Float>(point * Float(extent.width), -point * Float(extent.height), 0), texCoord: SIMD2<Float>(1, 1), textureIndex: 0),
-            Vertex(position: SIMD3<Float>(-point * Float(extent.width), point * Float(extent.height), 0), texCoord: SIMD2<Float>(0, 0), textureIndex: 0),
-            Vertex(position: SIMD3<Float>(point * Float(extent.width), point * Float(extent.height), 0), texCoord: SIMD2<Float>(1, 0), textureIndex: 0)
+            Vertex(position: SIMD3<Float>(-point * Float(extent.width), -point * Float(extent.height), 0), texCoord: SIMD2<Float>(0, 0), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(point * Float(extent.width), -point * Float(extent.height), 0), texCoord: SIMD2<Float>(1, 0), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(-point * Float(extent.width), point * Float(extent.height), 0), texCoord: SIMD2<Float>(0, 1), textureIndex: 0),
+            Vertex(position: SIMD3<Float>(point * Float(extent.width), point * Float(extent.height), 0), texCoord: SIMD2<Float>(1, 1), textureIndex: 0)
         ]
     }
     

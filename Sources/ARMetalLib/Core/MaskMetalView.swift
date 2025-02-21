@@ -42,7 +42,6 @@ public class MaskMetalView: MTKView {
     private var imageTargetExtent: CGSize?
     private var maskExtent: CGSize?
     private var playbackScale: Float? = 1.0
-    private var targetFullscreenExtent: CGSize?
     private var maskOffset: SIMD3<Float> = .zero
     
     private var isBufferUpdated: Bool = false
@@ -133,20 +132,16 @@ public class MaskMetalView: MTKView {
         createNonStecilPipelineImage()
     }
     
-    private func updateFullScreenImage(targetFullscreenExtent: CGSize, offset: SIMD2<Float>){
+    private func updateFullScreenImage(targetFullscreenExtent: CGSize){
         
-        guard let nonStencilImageBuffer else { return }
-        let bufferVertex = nonStencilImageBuffer.contents().assumingMemoryBound(to: Vertex.self)
+        guard let nonStencilImageBuffer, let overlayImageBuffer else { return }
+        let sourceBuffer = overlayImageBuffer.contents().assumingMemoryBound(to: Vertex.self)
+        let destBuffer = nonStencilImageBuffer.contents().assumingMemoryBound(to: Vertex.self)
         
-        let center: CGPoint = .zero
-        let extent = CGSize(width: 0.5 * Double(1/viewAps) * targetFullscreenExtent.width, height: 0.5 * targetFullscreenExtent.height)
-        let xValue = center.x + Double(offset.x)
-        let yValue = center.y + Double(offset.y)
-        
-        bufferVertex[0].position = SIMD3<Float>(Float(xValue - extent.width/2), Float(yValue + extent.height/2), 0.0)
-        bufferVertex[1].position = SIMD3<Float>(Float(xValue + extent.width/2), Float(yValue + extent.height/2), 0.0)
-        bufferVertex[2].position = SIMD3<Float>(Float(xValue - extent.width/2), Float(yValue - extent.height/2), 0.0)
-        bufferVertex[3].position = SIMD3<Float>(Float(xValue + extent.width/2), Float(yValue - extent.height/2), 0.0)
+        for i in 0..<4{
+            destBuffer[i] = sourceBuffer[i]
+            destBuffer[i].position.y *= viewAps
+        }
     }
     
     private func prepareFullscreenImage(scale: Float, offset: SIMD2<Float>){
@@ -308,12 +303,12 @@ public class MaskMetalView: MTKView {
 //        self.viewControllerDelegate = controller
 //    }
     /// Updated the Extent of the rendering Plane
-    public func setTargetSize(videoExtent: CGSize, maskTargetSize: CGSize, targetFullscreenExtent: CGSize, playbackScale: Float = 1.0, imageTargetExtent: CGSize){
+    public func setTargetSize(videoExtent: CGSize, maskTargetSize: CGSize, playbackScale: Float = 1.0, imageTargetExtent: CGSize){
         self.videoExtent = videoExtent
         self.imageTargetExtent = imageTargetExtent
         maskExtent = maskTargetSize
         self.playbackScale = playbackScale
-        self.targetFullscreenExtent = targetFullscreenExtent
+        
         updateVertexBuffer(newExtent: videoExtent)
         updateMaskVertices(maskVertexBuffer, maskTargetSize: maskTargetSize)
         updateOverlayVertices(targetSize: imageTargetExtent)
@@ -327,7 +322,7 @@ public class MaskMetalView: MTKView {
         // Setup the Fullscreen buffer
         setupExpBufferFullscreen()
         setupMaskBufferFullscreen()
-        updateFullScreenImage(targetFullscreenExtent: targetFullscreenExtent!, offset: .zero)
+        updateFullScreenImage(targetFullscreenExtent: imageTargetExtent!)
         // Experience points
         for (index, layer) in layerImages.enumerated() {
             if index < vertexBuffers.count {
@@ -357,15 +352,14 @@ public class MaskMetalView: MTKView {
             points.append(overlayBuffer[3].position)
         }
 
-        var value = scaleFactorTofit(points: points, bound: CGSize(width: 0.95, height: 0.95))
+        var value = scaleFactorTofit(points: points, bound: CGSize(width: 0.95, height: 0.9))
         print("new scale: \(value)")
         
-        
         // Mask
-        preparemaskBufferFullscreen(scale: value.scale * 1.06 * (playbackScale ?? 1.0), offset: value.offset )
+        preparemaskBufferFullscreen(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset )
         
         // Experience Content
-        prepareExpBufferFullscreen(scale: value.scale * 1.06 * (playbackScale ?? 1.0), offset: value.offset )
+        prepareExpBufferFullscreen(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset )
         
         // setup fullscreen scale
         prepareFullscreenImage(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)

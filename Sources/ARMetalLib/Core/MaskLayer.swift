@@ -29,6 +29,7 @@ public final class MaskLayer: @unchecked Sendable {
     var scale: Float
     var videoType: VideoType = .normal
     var useStencil: Bool = false
+    var isOverlayImaage: Bool = false
     
     // Computed property to access the type
     var type: ParallaxType {
@@ -64,13 +65,14 @@ public final class MaskLayer: @unchecked Sendable {
                 offset: SIMD3<Float>,
                 content: ParallaxContent,
                 texture: MTLTexture? = nil,
-                scale: Float = 1.0, useStencil: Bool = true) {
+                scale: Float = 1.0, useStencil: Bool = true, isOverlayImage: Bool = false) {
         self.id = id
         self.offset = offset
         self.content = content
         self.texture = texture
         self.scale = scale
         self.useStencil = useStencil
+        self.isOverlayImaage = isOverlayImage
     }
     
     // Convenience initializer for images
@@ -78,12 +80,12 @@ public final class MaskLayer: @unchecked Sendable {
                             offset: SIMD3<Float>,
                             image: UIImage,
                             texture: MTLTexture? = nil,
-                            scale: Float = 1.0, useStencil: Bool = true) {
+                            scale: Float = 1.0, useStencil: Bool = true, isOverlayImage: Bool) {
         self.init(id: id,
                   offset: offset,
                   content: .image(image),
                   texture: texture,
-                  scale: scale, useStencil: useStencil)
+                  scale: scale, useStencil: useStencil, isOverlayImage: isOverlayImage)
     }
     
     // Convenience initializer for videos

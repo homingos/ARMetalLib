@@ -325,6 +325,8 @@ public class MaskMetalView: MTKView {
         updateFullScreenImage(targetFullscreenExtent: imageTargetExtent!)
         // Experience points
         for (index, layer) in layerImages.enumerated() {
+            let id = layer.id
+            if id == -1 { continue }
             if index < vertexBuffers.count {
                 let vertexBuffer = fullscreenExpBuffer[index]
                 let bufferPointer = vertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
@@ -674,7 +676,6 @@ public class MaskMetalView: MTKView {
                 }
             }
             
-            print("fragment shader overlay: \(String(describing: fragmentFunction))")
             let pipelineDescriptor = MTLRenderPipelineDescriptor()
             pipelineDescriptor.label = "Render Pipeline"
             pipelineDescriptor.vertexFunction = vertexFunction
@@ -886,7 +887,6 @@ public class MaskMetalView: MTKView {
             maskEncoder.setRenderPipelineState(maskRenderPipelineState)
             maskEncoder.setDepthStencilState(writeStencilState)
             maskEncoder.setStencilReferenceValue(1)
-            //        print("drawing")
             // Render mask geometry
             // TODO: Create the buffer only once not every frame
             maskEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)

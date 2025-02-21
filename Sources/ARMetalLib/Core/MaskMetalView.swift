@@ -935,21 +935,21 @@ public class MaskMetalView: MTKView {
             updateUniforms(uniformBuffer)
             nonStencilEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
             nonStencilEncoder.setFragmentSamplerState(samplerState, index: 0)
-            if imageTrackingStatus == .tracking {
-                // Render overlay in tracking mode
-                if let overlayLayer = layerImageDic[-1],
-                   let texture = overlayLayer.texture {  // Check for valid texture
-                    nonStencilEncoder.setVertexBuffer(overlayImageBuffer, offset: 0, index: 0)
-                    nonStencilEncoder.setFragmentTexture(texture, index: 0)
-                    nonStencilEncoder.drawIndexedPrimitives(
-                        type: .triangle,
-                        indexCount: 6,
-                        indexType: .uint16,
-                        indexBuffer: indexBuffers[0],
-                        indexBufferOffset: 0
-                    )
-                }
-            }
+//            if imageTrackingStatus == .tracking {
+//                // Render overlay in tracking mode
+//                if let overlayLayer = layerImageDic[-1],
+//                   let texture = overlayLayer.texture {  // Check for valid texture
+//                    nonStencilEncoder.setVertexBuffer(overlayImageBuffer, offset: 0, index: 0)
+//                    nonStencilEncoder.setFragmentTexture(texture, index: 0)
+//                    nonStencilEncoder.drawIndexedPrimitives(
+//                        type: .triangle,
+//                        indexCount: 6,
+//                        indexType: .uint16,
+//                        indexBuffer: indexBuffers[0],
+//                        indexBufferOffset: 0
+//                    )
+//                }
+//            }
             if imageTrackingStatus == .trackingLost {
                 // Render overlay layer first (if exists and has valid texture)
                 if let overlayLayer = layerImageDic[-1],

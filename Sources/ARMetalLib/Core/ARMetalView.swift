@@ -955,17 +955,3 @@ public class ARMetalView: MTKView {
         layerImageDic.removeAll()
     }
 }
-
-extension ARMetalView {
-    
-    public func setupVideoContent(for layer: LayerImage, avplayer: AVPlayer? = nil) {
-        guard let device = self.device else { return }
-        let extringavPlayer = layer.avPlayer
-        let videoType = layer.alphaType
-        if let extringavPlayer {
-            layer.setupVideoContent(device: device, avplayer: extringavPlayer, videoType: videoType)
-        } else {
-            layer.setupVideoContent(device: device, avplayer: avplayer, videoType: videoType)
-        }
-    }
-}

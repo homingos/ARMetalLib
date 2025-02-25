@@ -187,47 +187,41 @@ public class LayerImage: @unchecked Sendable {
     }
     
     deinit {
+        print("Layer Images deinit")
         cleanup()
     }
 }
 
 extension LayerImage {
     
-    @MainActor public func setupVideoContent(device: MTLDevice, avplayer: AVPlayer?, videoType: VideoType) {
-        // Create texture cache synchronously
-        if self.textureCache == nil {
-            var newTextureCache: CVMetalTextureCache?
-            let status = CVMetalTextureCacheCreate(nil, nil, device, nil, &newTextureCache)
-            print("ss: texture cache created status: \(status)")
-            self.textureCache = newTextureCache
-        }
-        
-        guard let player = avplayer else {
-            print("Avplayer is coming nil")
-            return
-        }
-        
-        // Create a local copy of the video type
-        let localVideoType = videoType
-        
-        @MainActor func configurePlayer(_ player: AVPlayer, _ videoType: VideoType) {
-            
-            // Create video output
-            let videoPOutput = AVPlayerItemVideoOutput(pixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
-                kCVPixelBufferMetalCompatibilityKey as String: true
-            ])
-
-            self.videoOutput = videoPOutput
-            player.currentItem?.add(videoPOutput)
-            self.avPlayer = player
-            self.content = .video(videoPOutput, player, videoType)
-            self.isVideoSetup = true
-        }
-        
-        // Execute on main queue
-        configurePlayer(player, localVideoType)
-    }
+//    @MainActor public func setupVideoContent(device: MTLDevice, avplayer: AVPlayer?, videoType: VideoType) {
+//        // Create texture cache synchronously
+//        if self.textureCache == nil {
+//            var newTextureCache: CVMetalTextureCache?
+//            let status = CVMetalTextureCacheCreate(nil, nil, device, nil, &newTextureCache)
+//            print("ss: texture cache created status: \(status)")
+//            self.textureCache = newTextureCache
+//        }
+//        
+//        guard let player = avplayer else {
+//            print("Avplayer is coming nil")
+//            return
+//        }
+//        
+//        // Create a local copy of the video type
+//        let localVideoType = videoType
+//        
+//        @MainActor func configurePlayer(_ player: AVPlayer, _ videoType: VideoType) {
+//            
+//            // Create video output
+////            self.avPlayer = player
+////            self.content = .video(videoPOutput, player, videoType)
+//            self.isVideoSetup = true
+//        }
+//        
+//        // Execute on main queue
+//        configurePlayer(player, localVideoType)
+//    }
     
     private func updateVideoFrame(at time: CMTime) {
         guard case .video(let videoOutput?, _, let videoType) = content else { return }

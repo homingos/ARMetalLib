@@ -1158,7 +1158,7 @@ public class MaskMetalView: MTKView {
     private func updateMaskVertices(_ buffer: MTLBuffer, maskTargetSize: CGSize?) {
         let bufferPointer = buffer.contents().assumingMemoryBound(to: Vertex.self)
         let newExtent = maskTargetSize ?? CGSize(width: 1.0, height: 1.0)
-        let point: Float = 0.5
+        let point: Float = 0.5 * 1.01
         
         // Update x and z components (width and height) of each vertex
         // Vertex 0

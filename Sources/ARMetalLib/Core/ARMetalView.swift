@@ -90,12 +90,12 @@ public class ARMetalView: MTKView {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.framebufferOnly = false
-        self.maskMode = .none
+        self.maskMode = maskMode
         // true if you want to update the draw call manually using setNeedsDisplay()
         self.enableSetNeedsDisplay = true
         
         setupMetal()
-        setupMaskConfiguration(maskMode: .none)
+        setupMaskConfiguration(maskMode: maskMode)
         self.viewControllerDelegate = viewControllerDelegate
         //        setupDefaultVertices()
     }
@@ -576,9 +576,9 @@ public class ARMetalView: MTKView {
         
         for (index, layer) in layerImages.enumerated() {
             // Calculate base z-offset to avoid z-fighting between layers
-            let baseZOffset = -0.002 * Float(index)
+            let baseZOffset = Float(0);//-0.001 * Float(index)
             let zOffset = Float(layer.offset.z)
-            let finalZOffset = baseZOffset + zOffset
+            let finalZOffset = baseZOffset + zOffset * 2
             
             let xOffset = Float(layer.offset.x) // Small x-offset to prevent z-fighting
             let yOffset = Float(layer.offset.y) // Small y-offset to prevent z-fighting
@@ -757,8 +757,8 @@ public class ARMetalView: MTKView {
         }
         
         contentEncoder.setRenderPipelineState(renderPipelineState)
-//        contentEncoder.setDepthStencilState(testStencilState)
-//        contentEncoder.setStencilReferenceValue(1)
+        contentEncoder.setDepthStencilState(testStencilState)
+        contentEncoder.setStencilReferenceValue(1)
         contentEncoder.setFragmentSamplerState(samplerState, index: 0)
         
         updateUniforms(uniformBuffer)

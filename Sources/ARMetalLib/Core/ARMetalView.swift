@@ -90,12 +90,12 @@ public class ARMetalView: MTKView {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.framebufferOnly = false
-        self.maskMode = maskMode
+        self.maskMode = .none
         // true if you want to update the draw call manually using setNeedsDisplay()
         self.enableSetNeedsDisplay = true
         
         setupMetal()
-        setupMaskConfiguration(maskMode: maskMode)
+        setupMaskConfiguration(maskMode: .none)
         self.viewControllerDelegate = viewControllerDelegate
         //        setupDefaultVertices()
     }
@@ -621,25 +621,21 @@ public class ARMetalView: MTKView {
         }
         
         for (index, layer) in layerImages.enumerated() {
-            // Calculate offset based on layer priority
-            // Calculate offset based on layer priority
-            let zOffset = Float(layer.offset.z) * Float(targetImageExtent?.width ?? 1.0) * 100
-            let xOffset = Float(layer.offset.x)
-            let yOffset = Float(layer.offset.y)
+            // Calculate base z-offset to avoid z-fighting between layers
+            let zOffset = Float(index) + Float(layer.offset.z) * Float(targetImageExtent?.width ?? 1.0) * 100
+
+            let finalZOffset = baseZOffset + zOffset
+            let xOffset = Float(layer.offset.x) // Small x-offset to prevent z-fighting
+            let yOffset = Float(layer.offset.y) // Small y-offset to prevent z-fighting
             
             let extent = videoExtent ?? CGSize(width: 1.0, height: 1.0)
             let scale = layer.scale
-            print("awrfoawnerfiuawoeufhnioawe: \(index)")
-            // Create base vertices (before rotation)
-            let halfWidth = 0.5 * scale * Float(extent.width)
-            let halfHeight = 0.5 * scale * Float(extent.height)
-            
-            // Define vertices in local space (centered at origin)
-            var localVertices: [SIMD4<Float>] = [
-                SIMD4<Float>(-halfWidth, -halfHeight, 0, 1),  // Bottom-left
-                SIMD4<Float>(halfWidth, -halfHeight, 0, 1),   // Bottom-right
-                SIMD4<Float>(-halfWidth, halfHeight, 0, 1),   // Top-left
-                SIMD4<Float>(halfWidth, halfHeight, 0, 1)     // Top-right
+
+            let vertices: [Vertex] = [
+                Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), (-0.5 + yOffset) * scale * Float(extent.height), finalZOffset), texCoord: SIMD2<Float>(0.0, 1.0), textureIndex: UInt32(index)),
+                Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), (-0.5 + yOffset) * scale * Float(extent.height), finalZOffset), texCoord: SIMD2<Float>(1.0, 1.0), textureIndex: UInt32(index)),
+                Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), finalZOffset), texCoord: SIMD2<Float>(0.0, 0.0), textureIndex: UInt32(index)),
+                Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), finalZOffset), texCoord: SIMD2<Float>(1.0, 0.0), textureIndex: UInt32(index))
             ]
             
             // Apply rotation if layer has rotation property
@@ -837,8 +833,8 @@ public class ARMetalView: MTKView {
         }
         
         contentEncoder.setRenderPipelineState(renderPipelineState)
-        contentEncoder.setDepthStencilState(testStencilState)
-        contentEncoder.setStencilReferenceValue(1)
+//        contentEncoder.setDepthStencilState(testStencilState)
+//        contentEncoder.setStencilReferenceValue(1)
         contentEncoder.setFragmentSamplerState(samplerState, index: 0)
         
         updateUniforms(uniformBuffer)

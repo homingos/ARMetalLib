@@ -40,6 +40,7 @@ public class LayerImage: @unchecked Sendable {
     let id: String
     var textureCache: CVMetalTextureCache?
     let offset: SIMD3<Float>
+    let rotation: SIMD3<Float>
     var content: ParallaxContent
     var texture: MTLTexture?
     var scale: Float
@@ -116,26 +117,31 @@ public class LayerImage: @unchecked Sendable {
     
     // Initializer with ParallaxContent
     public init(id: String,
-                offset: SIMD3<Float>,
+                offset: SIMD3<Float>, rotation: SIMD3<Float>,
                 content: ParallaxContent,
                 texture: MTLTexture? = nil,
                 scale: Float = 1.0, alphaConfig: VideoType) {
+        print("constructor rotation 0: \(rotation)")
+
         self.id = id
         self.offset = offset
         self.content = content
         self.texture = texture
         self.scale = scale
         self.alphaType = alphaConfig
+        self.rotation = rotation
     }
     
     // Convenience initializer for images
     public convenience init(id: String,
-                            offset: SIMD3<Float>,
+                            offset: SIMD3<Float>, rotation: SIMD3<Float>,
                             image: UIImage,
                             texture: MTLTexture? = nil,
                             scale: Float = 1.0) {
+        print("constructor rotation2: \(rotation)")
+
         self.init(id: id,
-                  offset: offset,
+                  offset: offset, rotation: rotation,
                   content: .image(image),
                   texture: texture,
                   scale: scale, alphaConfig: .normal)
@@ -143,13 +149,14 @@ public class LayerImage: @unchecked Sendable {
     
     // Convenience initializer for videos
     public convenience init(id: String,
-                            offset: SIMD3<Float>,
+                            offset: SIMD3<Float>, rotation: SIMD3<Float>,
                             videoPlayerOutput: AVPlayerItemVideoOutput?,
                             avplayer: AVPlayer,
                             texture: MTLTexture? = nil,
                             scale: Float = 1.0, videoType: VideoType) {
+        print("constructor rotation1: \(rotation)")
         self.init(id: id,
-                  offset: offset,
+                  offset: offset, rotation: rotation,
                   content: .video(videoPlayerOutput, avplayer, videoType),
                   texture: texture,
                   scale: scale, alphaConfig: videoType)
@@ -180,6 +187,7 @@ public class LayerImage: @unchecked Sendable {
         - ID: \(id)
         - Offset: \(offsetString)
         - Scale: \(scale)
+        - Rotation: \(rotation)
         - Type: \(type)
         - Content: \(contentDescription)
         - Texture: \(textureDescription)

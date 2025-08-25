@@ -146,6 +146,8 @@ public class ARMetalView: MTKView {
                     var asp: Float = 1.0
                     let xOffset = Float(newOffset.x) * Float(targetImageExtent?.width ?? 1.0)
                     let yOffset = Float(newOffset.y) * Float(targetImageExtent?.height ?? 1.0)
+                    let zOffset = Float(newOffset.z) * Float(targetImageExtent?.height ?? 1.0) * 100
+
                     let newExtent = targetImageExtent ?? CGSizeMake(1.0, 1.0)
                     let scale = layer.scale
                     
@@ -168,21 +170,31 @@ public class ARMetalView: MTKView {
                             asp = 1 / asp
                             // Update x and z components (width and height) of each vertex
                             // Vertex 0
-                            bufferPointer[0].position.x = (-0.5 ) * scale * 1.0 + xOffset
-                            bufferPointer[0].position.y = ((-0.5) * scale * asp) + yOffset
+                            let rotationMatrix = simd_float4x4.rotationMatrix(rotationDegrees: layer.rotation)
+                            print("updating video vertex BY: \(layer.rotation)")
+
+                            // Define local vertices
+                            let halfWidth = 0.5 * scale * 1.0
+                            let halfHeight = 0.5 * scale * asp
                             
-                            // Vertex 1
-                            bufferPointer[1].position.x = (0.5 ) * scale * 1.0 + xOffset
-                            bufferPointer[1].position.y = (-0.5) * scale * asp  + yOffset
+                            let localVertices: [SIMD4<Float>] = [
+                                SIMD4<Float>(-halfWidth, -halfHeight, 0, 1),
+                                SIMD4<Float>(halfWidth, -halfHeight, 0, 1),
+                                SIMD4<Float>(-halfWidth, halfHeight, 0, 1),
+                                SIMD4<Float>(halfWidth, halfHeight, 0, 1)
+                            ]
                             
-                            // Vertex 2
-                            bufferPointer[2].position.x = (-0.5) * scale * 1.0 + xOffset
-                            bufferPointer[2].position.y = (0.5 ) * scale * asp + yOffset
-                            
-                            // Vertex 3
-                            bufferPointer[3].position.x = (0.5 ) * scale * 1.0 + xOffset
-                            bufferPointer[3].position.y = (0.5 ) * scale * asp + yOffset
-                            
+                            // Apply rotation and translation
+                            for i in 0..<4 {
+                                let rotatedVertex = rotationMatrix * localVertices[i]
+                                bufferPointer[i].position = SIMD3<Float>(
+                                    rotatedVertex.x + xOffset,
+                                    rotatedVertex.y + yOffset,
+                                    rotatedVertex.z + zOffset
+                                )
+                            }
+                            print("updating video vertex: \(rotationMatrix)")
+
                             print("Updated vertices for video layer when ready \(layer.id): \(bufferPointer[0].position)")
                         }
                     default:
@@ -211,6 +223,8 @@ public class ARMetalView: MTKView {
                 var asp: Float = 1.0
                 let xOffset = Float(newOffset.x) * Float(targetImageExtent?.width ?? 1.0)
                 let yOffset = Float(newOffset.y) * Float(targetImageExtent?.height ?? 1.0)
+                let zOffset = Float(newOffset.z) * Float(targetImageExtent?.width ?? 1.0) * 100
+
                 let newExtent = targetImageExtent ?? CGSizeMake(1.0, 1.0)
                 let scale = layer.scale
                 switch layer.content{
@@ -218,20 +232,43 @@ public class ARMetalView: MTKView {
                 case .image(_):
                     // Update x and z components (width and height) of each vertex
                     // Vertex 0
-                    bufferPointer[0].position.x = (-0.5 ) * scale * Float(newExtent.width) + xOffset
-                    bufferPointer[0].position.y = (-0.5) * scale * Float(newExtent.height) + yOffset
                     
-                    // Vertex 1
-                    bufferPointer[1].position.x = (0.5 ) * scale * Float(newExtent.width) + xOffset
-                    bufferPointer[1].position.y = (-0.5) * scale * Float(newExtent.height)  + yOffset
+                    let rotationMatrix = simd_float4x4.rotationMatrix(rotationDegrees: layer.rotation)
+                     // Define local vertices
+                     let halfWidth = 0.5 * scale * Float(newExtent.width)
+                     let halfHeight = 0.5 * scale * Float(newExtent.height)
+                     
+                     let localVertices: [SIMD4<Float>] = [
+                         SIMD4<Float>(-halfWidth, -halfHeight, 0, 1),
+                         SIMD4<Float>(halfWidth, -halfHeight, 0, 1),
+                         SIMD4<Float>(-halfWidth, halfHeight, 0, 1),
+                         SIMD4<Float>(halfWidth, halfHeight, 0, 1)
+                     ]
+                     
+                     // Apply rotation and translation to each vertex
+                     for i in 0..<4 {
+                         let rotatedVertex = rotationMatrix * localVertices[i]
+                         bufferPointer[i].position = SIMD3<Float>(
+                             rotatedVertex.x + xOffset,
+                             rotatedVertex.y + yOffset,
+                             rotatedVertex.z + zOffset
+                         )
+                     }
                     
-                    // Vertex 2
-                    bufferPointer[2].position.x = (-0.5) * scale * Float(newExtent.width) + xOffset
-                    bufferPointer[2].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
-                    
-                    // Vertex 3
-                    bufferPointer[3].position.x = (0.5 ) * scale * Float(newExtent.width) + xOffset
-                    bufferPointer[3].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
+//                    bufferPointer[0].position.x = (-0.5 ) * scale * Float(newExtent.width) + xOffset
+//                    bufferPointer[0].position.y = (-0.5) * scale * Float(newExtent.height) + yOffset
+//                    
+//                    // Vertex 1
+//                    bufferPointer[1].position.x = (0.5 ) * scale * Float(newExtent.width) + xOffset
+//                    bufferPointer[1].position.y = (-0.5) * scale * Float(newExtent.height)  + yOffset
+//                    
+//                    // Vertex 2
+//                    bufferPointer[2].position.x = (-0.5) * scale * Float(newExtent.width) + xOffset
+//                    bufferPointer[2].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
+//                    
+//                    // Vertex 3
+//                    bufferPointer[3].position.x = (0.5 ) * scale * Float(newExtent.width) + xOffset
+//                    bufferPointer[3].position.y = (0.5 ) * scale * Float(newExtent.height) + yOffset
                 case .video(_, let player, let videoType):
                     if let size = player.currentItem?.presentationSize {
                         switch videoType {
@@ -250,20 +287,29 @@ public class ARMetalView: MTKView {
                         asp = 1 / asp
                         // Update x and z components (width and height) of each vertex
                         // Vertex 0
-                        bufferPointer[0].position.x = (-0.5 ) * scale * 1.0 + xOffset
-                        bufferPointer[0].position.y = ((-0.5) * scale * asp) + yOffset
+
+                        // Create rotation matrix
+                        let rotationMatrix = simd_float4x4.rotationMatrix(rotationDegrees: layer.rotation)
+                        // Define local vertices for video
+                        let halfWidth = 0.5 * scale * 1.0
+                        let halfHeight = 0.5 * scale * asp
                         
-                        // Vertex 1
-                        bufferPointer[1].position.x = (0.5 ) * scale * 1.0 + xOffset
-                        bufferPointer[1].position.y = (-0.5) * scale * asp  + yOffset
+                        let localVertices: [SIMD4<Float>] = [
+                            SIMD4<Float>(-halfWidth, -halfHeight, 0, 1),
+                            SIMD4<Float>(halfWidth, -halfHeight, 0, 1),
+                            SIMD4<Float>(-halfWidth, halfHeight, 0, 1),
+                            SIMD4<Float>(halfWidth, halfHeight, 0, 1)
+                        ]
                         
-                        // Vertex 2
-                        bufferPointer[2].position.x = (-0.5) * scale * 1.0 + xOffset
-                        bufferPointer[2].position.y = (0.5 ) * scale * asp + yOffset
-                        
-                        // Vertex 3
-                        bufferPointer[3].position.x = (0.5 ) * scale * 1.0 + xOffset
-                        bufferPointer[3].position.y = (0.5 ) * scale * asp + yOffset
+                        // Apply rotation and translation to each vertex
+                        for i in 0..<4 {
+                            let rotatedVertex = rotationMatrix * localVertices[i]
+                            bufferPointer[i].position = SIMD3<Float>(
+                                rotatedVertex.x + xOffset,
+                                rotatedVertex.y + yOffset,
+                                rotatedVertex.z + zOffset
+                            )
+                        }
                         
                         print("Updated vertices for layer \(layer.id): \(bufferPointer[0].position)")
                     }
@@ -323,7 +369,7 @@ public class ARMetalView: MTKView {
                 if let cache = createTextureCache(device: device){
                     layerValues.textureCache = cache
                 } else { print("Failed to create texture cache") }
-//                CVMetalTextureCacheCreate(nil, nil, device,nil, &layerValues.textureCache)
+                //                CVMetalTextureCacheCreate(nil, nil, device,nil, &layerValues.textureCache)
             case .model(_):
                 break
             case .videov2:
@@ -446,7 +492,7 @@ public class ARMetalView: MTKView {
             
             guard let vertexFunction = library.makeFunction(name: "maskVertexShader") else { return }
             var fragmentFunction: MTLFunction?
-
+            
             switch maskMode {
             case .none:
                 fragmentFunction = library.makeFunction(name: "maskFragmentShader")
@@ -576,19 +622,56 @@ public class ARMetalView: MTKView {
         
         for (index, layer) in layerImages.enumerated() {
             // Calculate offset based on layer priority
-            let zOffset =  Float(layer.offset.z) * Float(targetImageExtent?.width ?? 1.0) // Small z-offset to prevent z-fighting
-            let xOffset =  Float(layer.offset.x) // Small x-offset to prevent z-fighting
-            let yOffset =  Float(layer.offset.y) // Small y-offset to prevent z-fighting
+            // Calculate offset based on layer priority
+            let zOffset = Float(layer.offset.z) * Float(targetImageExtent?.width ?? 1.0) * 100
+            let xOffset = Float(layer.offset.x)
+            let yOffset = Float(layer.offset.y)
             
             let extent = videoExtent ?? CGSize(width: 1.0, height: 1.0)
             let scale = layer.scale
+            print("awrfoawnerfiuawoeufhnioawe: \(index)")
+            // Create base vertices (before rotation)
+            let halfWidth = 0.5 * scale * Float(extent.width)
+            let halfHeight = 0.5 * scale * Float(extent.height)
             
-            let vertices: [Vertex] = [
-                Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), (-0.5 + yOffset) * scale * Float(extent.height), zOffset), texCoord: SIMD2<Float>(0.0, 1.0), textureIndex: UInt32(index)),
-                Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), (-0.5 + yOffset) * scale * Float(extent.height), zOffset) , texCoord: SIMD2<Float>(1.0, 1.0), textureIndex: UInt32(index)),
-                Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), zOffset) , texCoord: SIMD2<Float>(0.0, 0.0), textureIndex: UInt32(index)),
-                Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), zOffset), texCoord: SIMD2<Float>(1.0, 0.0), textureIndex: UInt32(index))
+            // Define vertices in local space (centered at origin)
+            var localVertices: [SIMD4<Float>] = [
+                SIMD4<Float>(-halfWidth, -halfHeight, 0, 1),  // Bottom-left
+                SIMD4<Float>(halfWidth, -halfHeight, 0, 1),   // Bottom-right
+                SIMD4<Float>(-halfWidth, halfHeight, 0, 1),   // Top-left
+                SIMD4<Float>(halfWidth, halfHeight, 0, 1)     // Top-right
             ]
+            
+            // Apply rotation if layer has rotation property
+            // Assuming layer.rotation exists as SIMD3<Float> in degrees
+            let rotationMatrix = simd_float4x4.rotationMatrix(rotationDegrees: layer.rotation)
+            // Transform vertices
+            var vertices: [Vertex] = []
+            for (i, localVertex) in localVertices.enumerated() {
+                // Apply rotation
+                let rotatedVertex = rotationMatrix * localVertex
+                
+                // Apply translation (offset)
+                let finalPosition = SIMD3<Float>(
+                    rotatedVertex.x + xOffset * Float(extent.width),
+                    rotatedVertex.y + yOffset * Float(extent.height),
+                    rotatedVertex.z + zOffset
+                )
+                
+                // Define texture coordinates
+                let texCoords: [SIMD2<Float>] = [
+                    SIMD2<Float>(0.0, 1.0),  // Bottom-left
+                    SIMD2<Float>(1.0, 1.0),  // Bottom-right
+                    SIMD2<Float>(0.0, 0.0),  // Top-left
+                    SIMD2<Float>(1.0, 0.0)   // Top-right
+                ]
+                
+                vertices.append(Vertex(
+                    position: finalPosition,
+                    texCoord: texCoords[i],
+                    textureIndex: UInt32(index)
+                ))
+            }
             
             let indices: [UInt16] = [
                 0, 1, 2,  // First triangle
@@ -805,9 +888,9 @@ public class ARMetalView: MTKView {
                         contentEncoder.setFragmentTexture(metalTexture, index: i)
                         let alphaType = layerImages[i].alphaType
                         var mode: Int32 = 1
-//                        contentEncoder.setFragmentBytes(&mode, length: MemoryLayout<Int32>.size, index: 1)
+                        //                        contentEncoder.setFragmentBytes(&mode, length: MemoryLayout<Int32>.size, index: 1)
                         contentEncoder.setFragmentBuffer(modeBuffers[i], offset: 0, index: 1)
-
+                        
                         contentEncoder.drawIndexedPrimitives(
                             type: .triangle,
                             indexCount: 6,
@@ -826,58 +909,58 @@ public class ARMetalView: MTKView {
             case .videov2:
                 break
                 
-//                print("Processing videov2 for layer ID: \(key)")
-//                let time = currentLayer.avPlayer?.currentTime() ?? CMTime(value: 1, timescale: 1)
-//                
-//                guard let videoOutput = currentLayer.videoOutput else {
-//                    print("VideoOutput is nil for layer \(key)")
-//                    continue
-//                }
-//                
-//                guard let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) else {
-//                    print("Failed to copy pixel buffer at time: \(time.seconds) for layer \(key)")
-//                    continue
-//                }
-//                
-//                guard let textureCache = currentLayer.textureCache else {
-//                    print("TextureCache is nil for layer \(key)")
-//                    continue
-//                }
-//                
-//                var cvTexture: CVMetalTexture?
-//                let width = CVPixelBufferGetWidth(pixelBuffer)
-//                let height = CVPixelBufferGetHeight(pixelBuffer)
-//                
-//                let status = CVMetalTextureCacheCreateTextureFromImage(
-//                    nil,
-//                    textureCache,
-//                    pixelBuffer,
-//                    nil,
-//                    .bgra8Unorm,
-//                    width,
-//                    height,
-//                    0,
-//                    &cvTexture
-//                )
-//                
-//                if status != kCVReturnSuccess {
-//                    print("Failed to create texture from image with status: \(status)")
-//                    continue
-//                }
-//                
-//                if let texture = cvTexture,
-//                   let metalTexture = CVMetalTextureGetTexture(texture) {
-//                    contentEncoder.setVertexBuffer(vertexBuffers[i], offset: 0, index: 0)
-//                    contentEncoder.setFragmentTexture(metalTexture, index: i)
-//                    
-//                    contentEncoder.drawIndexedPrimitives(
-//                        type: .triangle,
-//                        indexCount: 6,
-//                        indexType: .uint16,
-//                        indexBuffer: indexBuffers[i],
-//                        indexBufferOffset: 0
-//                    )
-//                }
+                //                print("Processing videov2 for layer ID: \(key)")
+                //                let time = currentLayer.avPlayer?.currentTime() ?? CMTime(value: 1, timescale: 1)
+                //
+                //                guard let videoOutput = currentLayer.videoOutput else {
+                //                    print("VideoOutput is nil for layer \(key)")
+                //                    continue
+                //                }
+                //
+                //                guard let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) else {
+                //                    print("Failed to copy pixel buffer at time: \(time.seconds) for layer \(key)")
+                //                    continue
+                //                }
+                //
+                //                guard let textureCache = currentLayer.textureCache else {
+                //                    print("TextureCache is nil for layer \(key)")
+                //                    continue
+                //                }
+                //
+                //                var cvTexture: CVMetalTexture?
+                //                let width = CVPixelBufferGetWidth(pixelBuffer)
+                //                let height = CVPixelBufferGetHeight(pixelBuffer)
+                //
+                //                let status = CVMetalTextureCacheCreateTextureFromImage(
+                //                    nil,
+                //                    textureCache,
+                //                    pixelBuffer,
+                //                    nil,
+                //                    .bgra8Unorm,
+                //                    width,
+                //                    height,
+                //                    0,
+                //                    &cvTexture
+                //                )
+                //
+                //                if status != kCVReturnSuccess {
+                //                    print("Failed to create texture from image with status: \(status)")
+                //                    continue
+                //                }
+                //
+                //                if let texture = cvTexture,
+                //                   let metalTexture = CVMetalTextureGetTexture(texture) {
+                //                    contentEncoder.setVertexBuffer(vertexBuffers[i], offset: 0, index: 0)
+                //                    contentEncoder.setFragmentTexture(metalTexture, index: i)
+                //
+                //                    contentEncoder.drawIndexedPrimitives(
+                //                        type: .triangle,
+                //                        indexCount: 6,
+                //                        indexType: .uint16,
+                //                        indexBuffer: indexBuffers[i],
+                //                        indexBufferOffset: 0
+                //                    )
+                //                }
             }
         }
         
@@ -953,5 +1036,41 @@ public class ARMetalView: MTKView {
         }
         layerImages.removeAll()
         layerImageDic.removeAll()
+    }
+}
+
+extension simd_float4x4 {
+    // Create rotation matrix from Euler angles (in degrees)
+    static func rotationMatrix(rotationDegrees: SIMD3<Float>) -> simd_float4x4 {
+        let radiansX = rotationDegrees.x * Float.pi / 180.0
+        let radiansY = rotationDegrees.y * Float.pi / 180.0
+        let radiansZ = rotationDegrees.z * Float.pi / 180.0
+        
+        // Rotation around X axis
+        let rotationX = simd_float4x4(
+            SIMD4<Float>(1, 0, 0, 0),
+            SIMD4<Float>(0, cos(radiansX), sin(radiansX), 0),
+            SIMD4<Float>(0, -sin(radiansX), cos(radiansX), 0),
+            SIMD4<Float>(0, 0, 0, 1)
+        )
+        
+        // Rotation around Y axis
+        let rotationY = simd_float4x4(
+            SIMD4<Float>(cos(radiansY), 0, -sin(radiansY), 0),
+            SIMD4<Float>(0, 1, 0, 0),
+            SIMD4<Float>(sin(radiansY), 0, cos(radiansY), 0),
+            SIMD4<Float>(0, 0, 0, 1)
+        )
+        
+        // Rotation around Z axis
+        let rotationZ = simd_float4x4(
+            SIMD4<Float>(cos(radiansZ), sin(radiansZ), 0, 0),
+            SIMD4<Float>(-sin(radiansZ), cos(radiansZ), 0, 0),
+            SIMD4<Float>(0, 0, 1, 0),
+            SIMD4<Float>(0, 0, 0, 1)
+        )
+        
+        // Combine rotations: Z * Y * X (typical order)
+        return rotationZ * rotationY * rotationX
     }
 }

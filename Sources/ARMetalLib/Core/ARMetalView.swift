@@ -146,7 +146,7 @@ public class ARMetalView: MTKView {
                     var asp: Float = 1.0
                     let xOffset = Float(newOffset.x) * Float(targetImageExtent?.width ?? 1.0)
                     let yOffset = Float(newOffset.y) * Float(targetImageExtent?.height ?? 1.0)
-                    let zOffset = Float(newOffset.z) * Float(targetImageExtent?.height ?? 1.0) * 100
+                    let zOffset = Float(newOffset.z) * Float(targetImageExtent?.height ?? 1.0)
 
                     let newExtent = targetImageExtent ?? CGSizeMake(1.0, 1.0)
                     let scale = layer.scale
@@ -223,7 +223,7 @@ public class ARMetalView: MTKView {
                 var asp: Float = 1.0
                 let xOffset = Float(newOffset.x) * Float(targetImageExtent?.width ?? 1.0)
                 let yOffset = Float(newOffset.y) * Float(targetImageExtent?.height ?? 1.0)
-                let zOffset = Float(newOffset.z) * Float(targetImageExtent?.width ?? 1.0) * 100
+                let zOffset = Float(newOffset.z) * Float(targetImageExtent?.width ?? 1.0)
 
                 let newExtent = targetImageExtent ?? CGSizeMake(1.0, 1.0)
                 let scale = layer.scale
@@ -508,7 +508,6 @@ public class ARMetalView: MTKView {
             pipelineDescriptor.label = "Mask Render Pipeline"
             pipelineDescriptor.vertexFunction = vertexFunction
             pipelineDescriptor.fragmentFunction = fragmentFunction
-            
             // Configure color attachment for mask pass
             let colorAttachment = pipelineDescriptor.colorAttachments[0]
             colorAttachment?.pixelFormat = self.colorPixelFormat
@@ -622,8 +621,7 @@ public class ARMetalView: MTKView {
         
         for (index, layer) in layerImages.enumerated() {
             // Calculate base z-offset to avoid z-fighting between layers
-            let zOffset = Float(index) + Float(layer.offset.z) * Float(targetImageExtent?.width ?? 1.0) * 100
-
+            let zOffset = Float(index) + Float(layer.offset.z) * Float(targetImageExtent?.width ?? 1.0)
             let finalZOffset = zOffset
             let xOffset = Float(layer.offset.x) // Small x-offset to prevent z-fighting
             let yOffset = Float(layer.offset.y) // Small y-offset to prevent z-fighting

@@ -624,14 +624,14 @@ public class ARMetalView: MTKView {
             // Calculate base z-offset to avoid z-fighting between layers
             let zOffset = Float(index) + Float(layer.offset.z) * Float(targetImageExtent?.width ?? 1.0) * 100
 
-            let finalZOffset = baseZOffset + zOffset
+            let finalZOffset = zOffset
             let xOffset = Float(layer.offset.x) // Small x-offset to prevent z-fighting
             let yOffset = Float(layer.offset.y) // Small y-offset to prevent z-fighting
             
             let extent = videoExtent ?? CGSize(width: 1.0, height: 1.0)
             let scale = layer.scale
 
-            let vertices: [Vertex] = [
+            var vertices: [Vertex] = [
                 Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), (-0.5 + yOffset) * scale * Float(extent.height), finalZOffset), texCoord: SIMD2<Float>(0.0, 1.0), textureIndex: UInt32(index)),
                 Vertex(position: SIMD3<Float>((0.5 + xOffset) * scale * Float(extent.width), (-0.5 + yOffset) * scale * Float(extent.height), finalZOffset), texCoord: SIMD2<Float>(1.0, 1.0), textureIndex: UInt32(index)),
                 Vertex(position: SIMD3<Float>((-0.5 + xOffset) * scale * Float(extent.width), (0.5 + yOffset) * scale * Float(extent.height), finalZOffset), texCoord: SIMD2<Float>(0.0, 0.0), textureIndex: UInt32(index)),
@@ -641,8 +641,17 @@ public class ARMetalView: MTKView {
             // Apply rotation if layer has rotation property
             // Assuming layer.rotation exists as SIMD3<Float> in degrees
             let rotationMatrix = simd_float4x4.rotationMatrix(rotationDegrees: layer.rotation)
-            // Transform vertices
-            var vertices: [Vertex] = []
+
+            let halfWidth = 0.5 * scale * Float(extent.width)
+            let halfHeight = 0.5 * scale * Float(extent.height)
+            
+            let localVertices: [SIMD4<Float>] = [
+                SIMD4<Float>(-halfWidth, -halfHeight, 0, 1),
+                SIMD4<Float>(halfWidth, -halfHeight, 0, 1),
+                SIMD4<Float>(-halfWidth, halfHeight, 0, 1),
+                SIMD4<Float>(halfWidth, halfHeight, 0, 1)
+            ]
+            
             for (i, localVertex) in localVertices.enumerated() {
                 // Apply rotation
                 let rotatedVertex = rotationMatrix * localVertex

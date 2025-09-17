@@ -1048,8 +1048,8 @@ public class MaskMetalView: MTKView {
             current: airboardCurrentPosition,
             target: offsetPosition,
             velocity: &airboardVelocity,
-            damping: 0.5,  // Match your SCNView damping value
-            frequency: 0.5, // Match your SCNView frequency value
+            damping: 0.5,  
+            frequency: 0.5,
             deltaTime: deltaTime
         )
         
@@ -1072,34 +1072,26 @@ public class MaskMetalView: MTKView {
         
         self.airboardWorldTransform = worldTransform
         
-        print("🎯 AIRBOARD METAL DEBUG: Camera position: \(cameraPosition)")
-        print("🎯 AIRBOARD METAL DEBUG: Current position: \(airboardCurrentPosition)")
-        print("🎯 AIRBOARD METAL DEBUG: World transform position: \(simd_make_float3(worldTransform.columns.3))")
     }
-
 
     private func criticallyDampedSpring(
         current: simd_float3,
         target: simd_float3,
         velocity: inout simd_float3,
-        damping: Float,
-        frequency: Float,
+        damping: Float = 1,
+        frequency: Float = 3,
         deltaTime: Float
     ) -> simd_float3 {
-        let omega = 2.0 * Float.pi * frequency
-        let dampingRatio = damping
-        let zeta = dampingRatio * omega
-        let omegaD = omega * sqrt(1.0 - dampingRatio * dampingRatio)
-        
-        let displacement = current - target
-        let exponentialDecay = exp(-zeta * deltaTime)
-        let cosPart = cos(omegaD * deltaTime)
-        let sinPart = sin(omegaD * deltaTime)
-        
-        let newDisplacement = exponentialDecay * (displacement * cosPart + ((velocity + zeta * displacement) / omegaD) * sinPart)
-        velocity = -exponentialDecay * ((velocity + zeta * displacement) * cosPart - displacement * omegaD * sinPart)
-        
-        return target + newDisplacement
+        let omega = frequency * 2 * Float.pi
+        let k = omega * omega
+        let c = 2 * damping * omega
+
+        let springForce = (target - current) * k
+        let dampingForce = velocity * -c
+        let acceleration = springForce + dampingForce
+
+        velocity += acceleration * deltaTime
+        return current + velocity * deltaTime
     }
 
     // Add this to your class's public interface

@@ -382,7 +382,6 @@ public class MaskMetalView: MTKView {
     private func updateAirboardCoordinates(){
         var points: [SIMD3<Float>] = []
         
-        // Setup the Airboard buffers
         setupExpBufferAirboard()
         setupMaskBufferAirboard()
         updateAirboardImage(targetAirboardExtent: imageTargetExtent!)
@@ -402,7 +401,6 @@ public class MaskMetalView: MTKView {
             }
         }
         
-        // Adding airboard overlay image
         if let nonStencilAirboardBuffer {
             let airboardBuffer = nonStencilAirboardBuffer.contents().assumingMemoryBound(to: Vertex.self)
             points.append(airboardBuffer[0].position)
@@ -411,16 +409,14 @@ public class MaskMetalView: MTKView {
             points.append(airboardBuffer[3].position)
         }
 
-        // Use more generous bounds for airboard (matching your SCNView scale factors)
-        var value = scaleFactorTofit(points: points, bound: CGSize(width: 0.8, height: 0.7))
+        var value = scaleFactorTofit(points: points, bound: CGSize(width: 0.6, height: 0.5))
         print("airboard scale: \(value)")
         
-        // Apply airboard positioning with world transform consideration
-        preparemaskBufferAirboard(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)
-        prepareExpBufferAirboard(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)
-        prepareAirboardImage(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)
+        // Apply scaling to keep content properly sized and centered
+        preparemaskBufferAirboard(scale: value.scale * 0.8 * (playbackScale ?? 1.0), offset: value.offset)
+        prepareExpBufferAirboard(scale: value.scale * 0.8 * (playbackScale ?? 1.0), offset: value.offset)
+        prepareAirboardImage(scale: value.scale * 0.8 * (playbackScale ?? 1.0), offset: value.offset)
     }
-
     private func setupMaskBufferAirboard() {
         guard let device, let maskVertexBuffer else { return }
         if drawBufferMaskAirboard == nil {
@@ -483,7 +479,6 @@ public class MaskMetalView: MTKView {
         }
     }
 
-    // 5. NEW: Add airboard preparation functions
     private func preparemaskBufferAirboard(scale: Float, offset: SIMD2<Float>) -> MTLBuffer? {
         guard let device, let maskVertexBuffer else { return nil}
         if drawBufferMaskAirboard == nil {
@@ -1032,66 +1027,97 @@ public class MaskMetalView: MTKView {
     }
     
 
-    // Updated updateAirboardPositioning method
     private func updateAirboardPositioning(cameraTransform: simd_float4x4?) {
         guard let cameraTransform = cameraTransform else { return }
         
-        // Use the exact same logic as your working SCNView implementation
-        let zOffset: Float = -3.0
         let deltaTime: Float = 1.0/60.0
-        let forward = simd_normalize(simd_make_float3(cameraTransform.columns.2))
         let cameraPosition = simd_make_float3(cameraTransform.columns.3)
         
-        let offsetPosition = cameraPosition + zOffset * forward
+        // FIXED: Calculate screen-locked target position
+        // This should be relative to camera rotation but NOT camera translation
+        let fixedDistance: Float = 2.0
+        let forward = -simd_normalize(simd_make_float3(cameraTransform.columns.2))
         
-        airboardCurrentPosition = criticallyDampedSpring(
+        // Key fix: Use a fixed reference point for screen center calculation
+        // Option 1: Use initial camera position (store when AR session starts)
+        // Option 2: Use world origin as reference
+        let screenCenterTarget = cameraPosition + forward * fixedDistance
+        
+        // But we need to modify this to be screen-relative, not world-relative
+        // The target should be calculated in camera space, then transformed to world space
+        
+        // Calculate target in camera's local space (always at center)
+        let localTarget = simd_float3(0, 0, -fixedDistance) // Always in front of camera
+        
+        // Transform to world space using camera transform
+        let worldTarget = simd_make_float3(matrix_multiply(cameraTransform, simd_float4(localTarget, 1.0)))
+        
+        // Use spring to smoothly move to the screen-centered position
+        airboardCurrentPosition = criticallyDampedSpringSimple(
             current: airboardCurrentPosition,
-            target: offsetPosition,
+            target: worldTarget,
             velocity: &airboardVelocity,
-            damping: 0.5,  
-            frequency: 0.5,
+            damping: 2.0,    // Increased damping for more stability
+            frequency: 3.0,  // Increased frequency for faster return
             deltaTime: deltaTime
         )
         
-        // Create world transform matrix with the smoothed position
+        
         var worldTransform = matrix_identity_float4x4
+        
+        let rotationMatrix = simd_float4x4(
+            cameraTransform.columns.0,
+            cameraTransform.columns.1,
+            cameraTransform.columns.2,
+            simd_float4(0, 0, 0, 1)
+        )
+        
+        let rotation = simd_float4x4(
+            simd_float4( 0, 1,  0, 0),
+            simd_float4( -1,  0,  0, 0),
+            simd_float4( 0,  0,  1, 0),
+            simd_float4( 0,  0,  0, 1)
+        )
+
+
+        
+        worldTransform = matrix_multiply(rotationMatrix, rotation)
         worldTransform.columns.3 = simd_float4(airboardCurrentPosition, 1.0)
         
-        // Apply the same "always facing camera" logic from your SCNView
-        var newForward = -simd_make_float3(cameraTransform.columns.2)
-        newForward.y = 0
-        newForward = simd_normalize(newForward)
-        
-        let lookAtTarget = cameraPosition + newForward
-        let up = simd_float3(0, 1, 0)
-        let lookAtMatrix = simd_float4x4(lookAt: cameraPosition, target: lookAtTarget, up: up)
-        
-        // Combine position and orientation
-        let orientationMatrix = simd_float4x4(simd_quatf(lookAtMatrix))
-        worldTransform = matrix_multiply(worldTransform, orientationMatrix)
-        
         self.airboardWorldTransform = worldTransform
-        
     }
 
-    private func criticallyDampedSpring(
+    // Enhanced spring function with better damping
+    private func criticallyDampedSpringSimple(
         current: simd_float3,
         target: simd_float3,
         velocity: inout simd_float3,
-        damping: Float = 1,
-        frequency: Float = 3,
+        damping: Float = 2.0,
+        frequency: Float = 3.0,
         deltaTime: Float
     ) -> simd_float3 {
         let omega = frequency * 2 * Float.pi
         let k = omega * omega
         let c = 2 * damping * omega
-
-        let springForce = (target - current) * k
-        let dampingForce = velocity * -c
+        
+        let displacement = current - target
+        let springForce = -displacement * k
+        let dampingForce = -velocity * c
         let acceleration = springForce + dampingForce
-
+        
         velocity += acceleration * deltaTime
-        return current + velocity * deltaTime
+        let newPosition = current + velocity * deltaTime
+        
+        // Optional: Add bounds checking relative to target
+        let maxDistance: Float = 0.5 // Reduced max distance
+        let distanceFromTarget = simd_length(newPosition - target)
+        
+        if distanceFromTarget > maxDistance {
+            let direction = simd_normalize(newPosition - target)
+            return target + direction * maxDistance
+        }
+        
+        return newPosition
     }
 
     // Add this to your class's public interface
@@ -1131,18 +1157,15 @@ public class MaskMetalView: MTKView {
                 vertexB = airboardExpBuffer.isEmpty ? vertexBuffers : airboardExpBuffer
                 maskBuffer = drawBufferMaskAirboard ?? maskVertexBuffer
                 overlayBuffer = nonStencilAirboardBuffer ?? overlayImageBuffer
-                print("Using airboard buffers for rendering")
                 
             case (.trackingLost, false):
                 // Use fullscreen buffers (existing logic)
                 vertexB = fullscreenExpBuffer.isEmpty ? vertexBuffers : fullscreenExpBuffer
                 maskBuffer = drawBufferMaskFullscreen ?? maskVertexBuffer
                 overlayBuffer = nonStencilImageBuffer ?? overlayImageBuffer
-                print("Using fullscreen buffers for rendering")
                 
             default:
                 // Use normal tracking buffers
-                print("Using normal tracking buffers for rendering")
                 break
             }
             

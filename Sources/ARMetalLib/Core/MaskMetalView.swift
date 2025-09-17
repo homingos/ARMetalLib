@@ -63,6 +63,17 @@ public class MaskMetalView: MTKView {
     
     private var isUpdatingLayers: Bool = false
     
+    //airboard related variables
+    private var isAirboardMode: Bool = false
+    private var airboardVelocity: simd_float3 = simd_float3(0, 0, 0) // For smooth positioning
+    private var airboardTargetPosition: simd_float3 = simd_float3(0, 0, -3.0)
+    private var airboardCurrentPosition: simd_float3 = simd_float3(0, 0, -3.0)
+    private var airboardExpBuffer: [MTLBuffer] = []
+    private var drawBufferMaskAirboard: MTLBuffer?
+    private var nonStencilAirboardBuffer: MTLBuffer!
+    private var airboardWorldTransform: simd_float4x4 = matrix_identity_float4x4
+    private var lastCameraTransform: simd_float4x4?
+    
     private let viewAps: Float
     
     public init?(frame: CGRect, device: MTLDevice, maskMode: MaskMode, videoType: VideoType = .normal) {
@@ -314,6 +325,7 @@ public class MaskMetalView: MTKView {
         updateOverlayVertices(targetSize: imageTargetExtent)
         // calculate the fullscreen Layer coordinates with mask for the scale factor to fit
         updateFullscreenCoordinates()
+        updateAirboardCoordinates()
     }
     
     private func updateFullscreenCoordinates(){
@@ -367,7 +379,163 @@ public class MaskMetalView: MTKView {
         prepareFullscreenImage(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)
         
     }
-    
+    private func updateAirboardCoordinates(){
+        var points: [SIMD3<Float>] = []
+        
+        // Setup the Airboard buffers
+        setupExpBufferAirboard()
+        setupMaskBufferAirboard()
+        updateAirboardImage(targetAirboardExtent: imageTargetExtent!)
+        
+        // Experience points for airboard positioning
+        for (index, layer) in layerImages.enumerated() {
+            let id = layer.id
+            if id == -1 { continue }
+            if index < vertexBuffers.count {
+                let vertexBuffer = airboardExpBuffer[index]
+                let bufferPointer = vertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
+                
+                points.append(bufferPointer[0].position)
+                points.append(bufferPointer[1].position)
+                points.append(bufferPointer[2].position)
+                points.append(bufferPointer[3].position)
+            }
+        }
+        
+        // Adding airboard overlay image
+        if let nonStencilAirboardBuffer {
+            let airboardBuffer = nonStencilAirboardBuffer.contents().assumingMemoryBound(to: Vertex.self)
+            points.append(airboardBuffer[0].position)
+            points.append(airboardBuffer[1].position)
+            points.append(airboardBuffer[2].position)
+            points.append(airboardBuffer[3].position)
+        }
+
+        // Use more generous bounds for airboard (matching your SCNView scale factors)
+        var value = scaleFactorTofit(points: points, bound: CGSize(width: 0.8, height: 0.7))
+        print("airboard scale: \(value)")
+        
+        // Apply airboard positioning with world transform consideration
+        preparemaskBufferAirboard(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)
+        prepareExpBufferAirboard(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)
+        prepareAirboardImage(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)
+    }
+
+    private func setupMaskBufferAirboard() {
+        guard let device, let maskVertexBuffer else { return }
+        if drawBufferMaskAirboard == nil {
+            drawBufferMaskAirboard = device.makeBuffer(
+                length: maskVertexBuffer.length,
+                options: .storageModeShared
+            )
+        }
+        
+        let sourcePointer = maskVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
+        let destPointer = drawBufferMaskAirboard!.contents().assumingMemoryBound(to: Vertex.self)
+        
+        // CHANGE: Airboard positioning doesn't need aspect ratio correction like fullscreen
+        for i in 0..<4 {
+            destPointer[i] = sourcePointer[i]
+            // Keep original proportions for airboard mode
+        }
+    }
+
+    private func setupExpBufferAirboard() {
+        guard let device else { return }
+        if airboardExpBuffer.isEmpty {
+            for vertexBuffer in vertexBuffers {
+                if let newBuffer = device.makeBuffer(
+                    length: vertexBuffer.length,
+                    options: .storageModeShared
+                ) {
+                    airboardExpBuffer.append(newBuffer)
+                }
+            }
+        }
+        
+        for (index, buffer) in airboardExpBuffer.enumerated() {
+            let sourcePointer = vertexBuffers[index].contents().assumingMemoryBound(to: Vertex.self)
+            let destPointer = buffer.contents().assumingMemoryBound(to: Vertex.self)
+            
+            for i in 0..<4 {
+                destPointer[i] = sourcePointer[i]
+                // Keep original proportions for airboard
+            }
+        }
+    }
+
+    private func updateAirboardImage(targetAirboardExtent: CGSize){
+        guard let overlayImageBuffer else { return }
+        
+        if nonStencilAirboardBuffer == nil {
+            nonStencilAirboardBuffer = device?.makeBuffer(
+                length: overlayImageBuffer.length,
+                options: .storageModeShared
+            )
+        }
+        
+        let sourceBuffer = overlayImageBuffer.contents().assumingMemoryBound(to: Vertex.self)
+        let destBuffer = nonStencilAirboardBuffer.contents().assumingMemoryBound(to: Vertex.self)
+        
+        for i in 0..<4{
+            destBuffer[i] = sourceBuffer[i]
+            // No aspect ratio correction needed for airboard
+        }
+    }
+
+    // 5. NEW: Add airboard preparation functions
+    private func preparemaskBufferAirboard(scale: Float, offset: SIMD2<Float>) -> MTLBuffer? {
+        guard let device, let maskVertexBuffer else { return nil}
+        if drawBufferMaskAirboard == nil {
+            drawBufferMaskAirboard = device.makeBuffer(
+                length: maskVertexBuffer.length,
+                options: .storageModeShared
+            )
+        }
+        
+        let destPointer = drawBufferMaskAirboard!.contents().assumingMemoryBound(to: Vertex.self)
+        
+        for i in 0..<4 {
+            destPointer[i].position *= scale
+            destPointer[i].position += SIMD3<Float>(offset.x, offset.y, 0.0)
+        }
+        return drawBufferMaskAirboard!
+    }
+
+    private func prepareExpBufferAirboard(scale: Float, offset: SIMD2<Float>) -> [MTLBuffer]{
+        guard let device else { return []}
+        if airboardExpBuffer.isEmpty {
+            for vertexBuffer in vertexBuffers {
+                if let newBuffer = device.makeBuffer(
+                    length: vertexBuffer.length,
+                    options: .storageModeShared
+                ) {
+                    airboardExpBuffer.append(newBuffer)
+                }
+            }
+        }
+        
+        for (index, buffer) in airboardExpBuffer.enumerated() {
+            let destPointer = buffer.contents().assumingMemoryBound(to: Vertex.self)
+            
+            for i in 0..<4 {
+                destPointer[i].position *= scale
+                destPointer[i].position += SIMD3<Float>(offset.x, offset.y, 0.0)
+            }
+        }
+        return airboardExpBuffer
+    }
+
+    private func prepareAirboardImage(scale: Float, offset: SIMD2<Float>){
+        guard let nonStencilAirboardBuffer else { return }
+        let bufferVertex = nonStencilAirboardBuffer.contents().assumingMemoryBound(to: Vertex.self)
+        
+        for i in 0..<4 {
+            bufferVertex[i].position *= scale
+            bufferVertex[i].position += SIMD3(offset.x, offset.y, 0.0)
+        }
+    }
+
     private func updateVertexBuffer(newExtent: CGSize) {
         print("111: updateLayerVertices called with extent: \(newExtent)")
         isBufferUpdated = false
@@ -835,11 +1003,26 @@ public class MaskMetalView: MTKView {
     public func updateTransforms(
         anchorTransform: simd_float4x4,
         cameraTransform: simd_float4x4?,
-        projectionMatrix: simd_float4x4, trackingStatus: TrackingStatus
+        projectionMatrix: simd_float4x4, trackingStatus: TrackingStatus,
+        isAirboardEnabled: Bool = false
     ) {
-        self.anchorTransform = anchorTransform
-        self.cameraTransform = cameraTransform
+        
+        self.lastCameraTransform = cameraTransform
         self.projectionMatrix = projectionMatrix
+        
+        
+        print("check this \(isAirboardEnabled)")
+        if trackingStatus == .trackingLost && isAirboardEnabled {
+            self.isAirboardMode = true
+            // Apply smooth airboard positioning similar to video node implementation
+            updateAirboardPositioning(cameraTransform: cameraTransform)
+            self.anchorTransform = self.airboardWorldTransform
+            self.cameraTransform = matrix_identity_float4x4
+        } else {
+            self.isAirboardMode = false
+            self.anchorTransform = anchorTransform
+            self.cameraTransform = cameraTransform
+        }
         
         self.imageTrackingStatus = trackingStatus
         if (layerImages.count == vertexBuffers.count) && isBufferUpdated{
@@ -848,6 +1031,77 @@ public class MaskMetalView: MTKView {
 
     }
     
+
+    // Updated updateAirboardPositioning method
+    private func updateAirboardPositioning(cameraTransform: simd_float4x4?) {
+        guard let cameraTransform = cameraTransform else { return }
+        
+        // Use the exact same logic as your working SCNView implementation
+        let zOffset: Float = -3.0
+        let deltaTime: Float = 1.0/60.0
+        let forward = simd_normalize(simd_make_float3(cameraTransform.columns.2))
+        let cameraPosition = simd_make_float3(cameraTransform.columns.3)
+        
+        let offsetPosition = cameraPosition + zOffset * forward
+        
+        airboardCurrentPosition = criticallyDampedSpring(
+            current: airboardCurrentPosition,
+            target: offsetPosition,
+            velocity: &airboardVelocity,
+            damping: 0.5,  // Match your SCNView damping value
+            frequency: 0.5, // Match your SCNView frequency value
+            deltaTime: deltaTime
+        )
+        
+        // Create world transform matrix with the smoothed position
+        var worldTransform = matrix_identity_float4x4
+        worldTransform.columns.3 = simd_float4(airboardCurrentPosition, 1.0)
+        
+        // Apply the same "always facing camera" logic from your SCNView
+        var newForward = -simd_make_float3(cameraTransform.columns.2)
+        newForward.y = 0
+        newForward = simd_normalize(newForward)
+        
+        let lookAtTarget = cameraPosition + newForward
+        let up = simd_float3(0, 1, 0)
+        let lookAtMatrix = simd_float4x4(lookAt: cameraPosition, target: lookAtTarget, up: up)
+        
+        // Combine position and orientation
+        let orientationMatrix = simd_float4x4(simd_quatf(lookAtMatrix))
+        worldTransform = matrix_multiply(worldTransform, orientationMatrix)
+        
+        self.airboardWorldTransform = worldTransform
+        
+        print("🎯 AIRBOARD METAL DEBUG: Camera position: \(cameraPosition)")
+        print("🎯 AIRBOARD METAL DEBUG: Current position: \(airboardCurrentPosition)")
+        print("🎯 AIRBOARD METAL DEBUG: World transform position: \(simd_make_float3(worldTransform.columns.3))")
+    }
+
+
+    private func criticallyDampedSpring(
+        current: simd_float3,
+        target: simd_float3,
+        velocity: inout simd_float3,
+        damping: Float,
+        frequency: Float,
+        deltaTime: Float
+    ) -> simd_float3 {
+        let omega = 2.0 * Float.pi * frequency
+        let dampingRatio = damping
+        let zeta = dampingRatio * omega
+        let omegaD = omega * sqrt(1.0 - dampingRatio * dampingRatio)
+        
+        let displacement = current - target
+        let exponentialDecay = exp(-zeta * deltaTime)
+        let cosPart = cos(omegaD * deltaTime)
+        let sinPart = sin(omegaD * deltaTime)
+        
+        let newDisplacement = exponentialDecay * (displacement * cosPart + ((velocity + zeta * displacement) / omegaD) * sinPart)
+        velocity = -exponentialDecay * ((velocity + zeta * displacement) * cosPart - displacement * omegaD * sinPart)
+        
+        return target + newDisplacement
+    }
+
     // Add this to your class's public interface
     func updateMaskImage(_ image: UIImage) {
         guard let device = device,
@@ -872,6 +1126,34 @@ public class MaskMetalView: MTKView {
                   let testStencilState = testStencilState else {
                 return
             }
+            
+            // CHANGE: Determine which buffers to use based on mode FIRST
+            var vertexB = vertexBuffers
+            var maskBuffer = maskVertexBuffer
+            var overlayBuffer = overlayImageBuffer
+            
+            // NEW: Switch buffers based on current mode
+            switch (imageTrackingStatus, isAirboardMode) {
+            case (.trackingLost, true):  // FIXED: Use trackingLost instead of notRecoganized
+                // Use airboard buffers
+                vertexB = airboardExpBuffer.isEmpty ? vertexBuffers : airboardExpBuffer
+                maskBuffer = drawBufferMaskAirboard ?? maskVertexBuffer
+                overlayBuffer = nonStencilAirboardBuffer ?? overlayImageBuffer
+                print("Using airboard buffers for rendering")
+                
+            case (.trackingLost, false):
+                // Use fullscreen buffers (existing logic)
+                vertexB = fullscreenExpBuffer.isEmpty ? vertexBuffers : fullscreenExpBuffer
+                maskBuffer = drawBufferMaskFullscreen ?? maskVertexBuffer
+                overlayBuffer = nonStencilImageBuffer ?? overlayImageBuffer
+                print("Using fullscreen buffers for rendering")
+                
+            default:
+                // Use normal tracking buffers
+                print("Using normal tracking buffers for rendering")
+                break
+            }
+            
             // MARK: First pass - render mask to stencil buffer
             renderPassDescriptor.stencilAttachment.clearStencil = 0
             renderPassDescriptor.stencilAttachment.loadAction = .clear
@@ -887,23 +1169,14 @@ public class MaskMetalView: MTKView {
             maskEncoder.setRenderPipelineState(maskRenderPipelineState)
             maskEncoder.setDepthStencilState(writeStencilState)
             maskEncoder.setStencilReferenceValue(1)
-            // Render mask geometry
-            // TODO: Create the buffer only once not every frame
             maskEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
             
-            // Apply the maskImage if present
+            // CHANGE: Apply the selected maskBuffer instead of hardcoded maskVertexBuffer
             switch maskMode {
             case .none:
-                var maskVB = maskVertexBuffer
-                maskEncoder.setVertexBuffer(maskVB, offset: 0, index: 0)
-                break
+                maskEncoder.setVertexBuffer(maskBuffer, offset: 0, index: 0)
             case .Image(let uIImage, let offset):
-                var maskVB = maskVertexBuffer
-                if imageTrackingStatus == .trackingLost, let drawBufferMaskFullscreen{
-                    maskVB = drawBufferMaskFullscreen
-                }
-                
-                maskEncoder.setVertexBuffer(maskVB, offset: 0, index: 0)
+                maskEncoder.setVertexBuffer(maskBuffer, offset: 0, index: 0)
                 maskEncoder.setFragmentTexture(maskTexture, index: 8)
                 maskEncoder.setFragmentSamplerState(samplerState, index: 0)
             case .VideoPlayer(_):
@@ -917,9 +1190,7 @@ public class MaskMetalView: MTKView {
             renderPassDescriptor.stencilAttachment.loadAction = .load
             renderPassDescriptor.colorAttachments[0].loadAction = .load
             
-            var vertexB = vertexBuffers
-            
-            //MARK: Rendering non stencil part
+            //MARK: Rendering non stencil part (Overlay Images)
             guard let nonStencilEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
                 return
             }
@@ -929,13 +1200,16 @@ public class MaskMetalView: MTKView {
             updateUniforms(uniformBuffer)
             nonStencilEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
             nonStencilEncoder.setFragmentSamplerState(samplerState, index: 0)
+            
             let overlayLayer = layerImageDic[-1]
             let isOverlayImage = overlayLayer?.isOverlayImaage ?? false
-            if imageTrackingStatus == .tracking, isOverlayImage{
+            
+            // CHANGE: Use selected overlayBuffer based on mode
+            if imageTrackingStatus == .tracking && isOverlayImage {
                 // Render overlay in tracking mode
                 if let overlayLayer = layerImageDic[-1],
-                   let texture = overlayLayer.texture {  // Check for valid texture
-                    nonStencilEncoder.setVertexBuffer(overlayImageBuffer, offset: 0, index: 0)
+                   let texture = overlayLayer.texture {
+                    nonStencilEncoder.setVertexBuffer(overlayImageBuffer, offset: 0, index: 0) // Always use original for tracking
                     nonStencilEncoder.setFragmentTexture(texture, index: 0)
                     nonStencilEncoder.drawIndexedPrimitives(
                         type: .triangle,
@@ -946,11 +1220,12 @@ public class MaskMetalView: MTKView {
                     )
                 }
             }
+            
+            // CHANGE: Use selected overlayBuffer for non-tracking modes
             if imageTrackingStatus == .trackingLost {
-                // Render overlay layer first (if exists and has valid texture)
                 if let overlayLayer = layerImageDic[-1],
-                   let texture = overlayLayer.texture {  // Check for valid texture
-                    nonStencilEncoder.setVertexBuffer(nonStencilImageBuffer, offset: 0, index: 0)
+                   let texture = overlayLayer.texture {
+                    nonStencilEncoder.setVertexBuffer(overlayBuffer, offset: 0, index: 0) // FIXED: Use selected buffer
                     nonStencilEncoder.setFragmentTexture(texture, index: 0)
                     nonStencilEncoder.drawIndexedPrimitives(
                         type: .triangle,
@@ -966,7 +1241,7 @@ public class MaskMetalView: MTKView {
             
             //MARK: Rendering non stencil Experience part
             guard let nonStencilEncoderExp = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else { return }
-            // Setup common encoder state
+            
             nonStencilEncoderExp.setRenderPipelineState(nonStencilPipelineLayer)
             updateUniforms(uniformBuffer)
             nonStencilEncoderExp.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
@@ -979,7 +1254,7 @@ public class MaskMetalView: MTKView {
                 
                 switch currentLayer.content {
                 case .image(_):
-                    guard let texture = currentLayer.texture else { continue }  // Skip if no texture
+                    guard let texture = currentLayer.texture else { continue }
                     nonStencilEncoderExp.setVertexBuffer(vertexB[i], offset: 0, index: 0)
                     nonStencilEncoderExp.setFragmentTexture(texture, index: 0)
                     nonStencilEncoderExp.drawIndexedPrimitives(
@@ -1014,8 +1289,8 @@ public class MaskMetalView: MTKView {
                     guard let texture = cvTexture,
                           let metalTexture = CVMetalTextureGetTexture(texture) else { continue }
                     
-                    let buffer = imageTrackingStatus == .trackingLost ? fullscreenExpBuffer[i] : vertexB[i]
-                    nonStencilEncoderExp.setVertexBuffer(buffer, offset: 0, index: 0)
+                    // CHANGE: Use the pre-selected vertexB instead of hardcoded logic
+                    nonStencilEncoderExp.setVertexBuffer(vertexB[i], offset: 0, index: 0)
                     nonStencilEncoderExp.setFragmentTexture(metalTexture, index: i)
                     nonStencilEncoderExp.drawIndexedPrimitives(
                         type: .triangle,
@@ -1040,40 +1315,18 @@ public class MaskMetalView: MTKView {
             }
             contentEncoder.setRenderPipelineState(renderPipelineState)
             contentEncoder.setDepthStencilState(testStencilState)
-            contentEncoder.setStencilReferenceValue(1)  // Must match the value written in the mask pass
+            contentEncoder.setStencilReferenceValue(1)
             contentEncoder.setFragmentSamplerState(samplerState, index: 0)
             
-            // TODO: Update this for supporting multi-Parallax
             updateUniforms(uniformBuffer)
             contentEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
-//            let copiedLayerImages = layerImages.map { $0.copy() }
-            //        let newOffset = viewControllerDelegate?.willUpdateDraw(layerImages: copiedLayerImages)
-            let newOffset:[SIMD3<Float>]? = nil
             
-            if newOffset == nil {
-                
-            } else {
-                if let newOffset {
-                    for i in 0..<vertexB.count {
-                        let existingVertexBuffer = vertexB[i]
-                        let layerIndex = i / 4
-                        let bufferPointer = existingVertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
-                        print("before: \(bufferPointer[0].position)")
-                        bufferPointer[0].position += newOffset[layerIndex]
-                        bufferPointer[1].position += newOffset[layerIndex]
-                        bufferPointer[2].position += newOffset[layerIndex]
-                        bufferPointer[3].position += newOffset[layerIndex]
-                        
-                        print("after: \(bufferPointer[0].position)")
-                    }
-                }
-            }
-            // Draw each layer
+            // Draw each stencil layer
             for i in 0..<layerImages.count {
                 let currentLayer = layerImages[i]
-                let contentType = currentLayer.content
                 if currentLayer.useStencil == false { continue }
-                switch contentType {
+                
+                switch currentLayer.content {
                 case .image(_):
                     if let texture = currentLayer.texture {
                         contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
@@ -1087,9 +1340,12 @@ public class MaskMetalView: MTKView {
                             indexBufferOffset: 0
                         )
                     }
+                    
                 case .video(let playerItemVideoOutput, let avplayer, let videoType):
                     let time = avplayer.currentTime()
-                    if let videoOutput = playerItemVideoOutput, let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil), let textureCache = currentLayer.textureCache {
+                    if let videoOutput = playerItemVideoOutput,
+                       let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil),
+                       let textureCache = currentLayer.textureCache {
                         
                         var cvTexture: CVMetalTexture?
                         let width = CVPixelBufferGetWidth(pixelBuffer)
@@ -1105,15 +1361,11 @@ public class MaskMetalView: MTKView {
                             0,
                             &cvTexture
                         )
-                        var buffer = vertexB[i]
-                        // add the vertex logic to restrict the vertex
-                        if imageTrackingStatus == .trackingLost {
-                            //                        constrainVideoFrame(vertexB[i])
-                            buffer = fullscreenExpBuffer[i]
-                        }
+                        
                         if let texture = cvTexture,
                            let metalTexture = CVMetalTextureGetTexture(texture) {
-                            contentEncoder.setVertexBuffer(buffer, offset: 0, index: 0)
+                            // CHANGE: Use the pre-selected vertexB instead of hardcoded buffer selection
+                            contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
                             contentEncoder.setFragmentTexture(metalTexture, index: i)
                             
                             contentEncoder.drawIndexedPrimitives(
@@ -1127,10 +1379,10 @@ public class MaskMetalView: MTKView {
                             print("Failed to get metal texture from CVMetalTexture")
                         }
                     } else {
-                        print("things ar enot valid")
+                        print("Video output components not valid")
                     }
-                case .model(let uRL):
-                    // TODO: For 3d objects
+                    
+                case .model(_):
                     break
                 case .videov2:
                     break
@@ -1143,7 +1395,6 @@ public class MaskMetalView: MTKView {
             commandBuffer.commit()
         }
     }
-    
     private func createMaskVertices() -> [Vertex] {
         let extent = videoExtent ?? CGSize(width: 1.0, height: 1.0)
         let point: Float = 0.5 // Adjust this value to change the size of the mask
@@ -1378,6 +1629,12 @@ public class MaskMetalView: MTKView {
         layerImageDic.removeAll()
         
         clearVertexBuffer()
+        clearAirboardBuffers()
+    }
+    private func clearAirboardBuffers(){
+        airboardExpBuffer.removeAll()
+        drawBufferMaskAirboard = nil
+        nonStencilAirboardBuffer = nil
     }
     
     private func clearVertexBuffer(){
@@ -1389,5 +1646,21 @@ public class MaskMetalView: MTKView {
         print("deinit called for ARMetalView")
         layerImages.removeAll()
         layerImageDic.removeAll()
+    }
+}
+
+
+extension simd_float4x4 {
+    init(lookAt eye: simd_float3, target: simd_float3, up: simd_float3) {
+        let zAxis = simd_normalize(eye - target)
+        let xAxis = simd_normalize(simd_cross(up, zAxis))
+        let yAxis = simd_cross(zAxis, xAxis)
+        
+        self.init(
+            simd_float4(xAxis, 0),
+            simd_float4(yAxis, 0),
+            simd_float4(zAxis, 0),
+            simd_float4(eye, 1)
+        )
     }
 }

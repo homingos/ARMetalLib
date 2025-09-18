@@ -1033,29 +1033,25 @@ public class MaskMetalView: MTKView {
         let deltaTime: Float = 1.0/60.0
         let cameraPosition = simd_make_float3(cameraTransform.columns.3)
         
-        // FIXED: Calculate screen-locked target position
-        // This should be relative to camera rotation but NOT camera translation
+        var translation = matrix_identity_float4x4
+        translation.columns.3.z = -2.0
+        let transform = simd_mul(cameraTransform, translation)
+        
+        let position = SIMD3(
+                   cameraTransform.columns.3.x,
+                   cameraTransform.columns.3.y,
+                   cameraTransform.columns.3.z - 1.0
+               )
+        
         let fixedDistance: Float = 2.0
         let forward = -simd_normalize(simd_make_float3(cameraTransform.columns.2))
         
-        // Key fix: Use a fixed reference point for screen center calculation
-        // Option 1: Use initial camera position (store when AR session starts)
-        // Option 2: Use world origin as reference
         let screenCenterTarget = cameraPosition + forward * fixedDistance
-        
-        // But we need to modify this to be screen-relative, not world-relative
-        // The target should be calculated in camera space, then transformed to world space
-        
-        // Calculate target in camera's local space (always at center)
-        let localTarget = simd_float3(0, 0, -fixedDistance) // Always in front of camera
-        
-        // Transform to world space using camera transform
-        let worldTarget = simd_make_float3(matrix_multiply(cameraTransform, simd_float4(localTarget, 1.0)))
         
         // Use spring to smoothly move to the screen-centered position
         airboardCurrentPosition = criticallyDampedSpringSimple(
             current: airboardCurrentPosition,
-            target: worldTarget,
+            target: screenCenterTarget,
             velocity: &airboardVelocity,
             damping: 2.0,    // Increased damping for more stability
             frequency: 3.0,  // Increased frequency for faster return
@@ -1065,13 +1061,6 @@ public class MaskMetalView: MTKView {
         
         var worldTransform = matrix_identity_float4x4
         
-        let rotationMatrix = simd_float4x4(
-            cameraTransform.columns.0,
-            cameraTransform.columns.1,
-            cameraTransform.columns.2,
-            simd_float4(0, 0, 0, 1)
-        )
-        
         let rotation = simd_float4x4(
             simd_float4( 0, 1,  0, 0),
             simd_float4( -1,  0,  0, 0),
@@ -1079,9 +1068,6 @@ public class MaskMetalView: MTKView {
             simd_float4( 0,  0,  0, 1)
         )
 
-
-        
-        worldTransform = matrix_multiply(rotationMatrix, rotation)
         worldTransform.columns.3 = simd_float4(airboardCurrentPosition, 1.0)
         
         self.airboardWorldTransform = worldTransform

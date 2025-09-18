@@ -1033,15 +1033,6 @@ public class MaskMetalView: MTKView {
         let deltaTime: Float = 1.0/60.0
         let cameraPosition = simd_make_float3(cameraTransform.columns.3)
         
-        var translation = matrix_identity_float4x4
-        translation.columns.3.z = -2.0
-        let transform = simd_mul(cameraTransform, translation)
-        
-        let position = SIMD3(
-                   cameraTransform.columns.3.x,
-                   cameraTransform.columns.3.y,
-                   cameraTransform.columns.3.z - 1.0
-               )
         
         let fixedDistance: Float = 2.0
         let forward = -simd_normalize(simd_make_float3(cameraTransform.columns.2))

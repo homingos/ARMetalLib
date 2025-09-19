@@ -1010,7 +1010,7 @@ public class MaskMetalView: MTKView {
         if trackingStatus == .trackingLost && isAirboardEnabled {
             self.isAirboardMode = true
             // Apply smooth airboard positioning similar to video node implementation
-            updateAirboardPositioning(cameraTransform: cameraTransform)
+            updateAirboardPositioning(cameraTransform: anchorTransform)
             self.anchorTransform = self.airboardWorldTransform
             self.cameraTransform = cameraTransform
         } else {

@@ -1012,7 +1012,7 @@ public class MaskMetalView: MTKView {
             // Apply smooth airboard positioning similar to video node implementation
             updateAirboardPositioning(cameraTransform: cameraTransform)
             self.anchorTransform = self.airboardWorldTransform
-            self.cameraTransform = matrix_identity_float4x4
+            self.cameraTransform = cameraTransform
         } else {
             self.isAirboardMode = false
             self.anchorTransform = anchorTransform
@@ -1038,14 +1038,14 @@ public class MaskMetalView: MTKView {
         let forward = -simd_normalize(simd_make_float3(cameraTransform.columns.2))
         
         let screenCenterTarget = cameraPosition + forward * fixedDistance
-        
+        print("screen center target: \(forward)")
         // Use spring to smoothly move to the screen-centered position
         airboardCurrentPosition = criticallyDampedSpringSimple(
             current: airboardCurrentPosition,
             target: screenCenterTarget,
             velocity: &airboardVelocity,
-            damping: 2.0,    // Increased damping for more stability
-            frequency: 3.0,  // Increased frequency for faster return
+            damping: 0.5,    // Increased damping for more stability
+            frequency: 0.5,  // Increased frequency for faster return
             deltaTime: deltaTime
         )
         
@@ -1060,7 +1060,8 @@ public class MaskMetalView: MTKView {
         )
 
         worldTransform.columns.3 = simd_float4(airboardCurrentPosition, 1.0)
-        
+//        worldTransform = matrix_multiply(worldTransform, rotation)
+
         self.airboardWorldTransform = worldTransform
     }
 
@@ -1192,7 +1193,7 @@ public class MaskMetalView: MTKView {
             updateUniforms(uniformBuffer)
             nonStencilEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
             nonStencilEncoder.setFragmentSamplerState(samplerState, index: 0)
-            
+            print("check: \(airboardWorldTransform)")
             let overlayLayer = layerImageDic[-1]
             let isOverlayImage = overlayLayer?.isOverlayImaage ?? false
             

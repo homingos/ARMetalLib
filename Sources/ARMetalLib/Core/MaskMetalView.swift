@@ -1034,11 +1034,11 @@ public class MaskMetalView: MTKView {
         let cameraPosition = simd_make_float3(cameraTransform.columns.3)
         
         
-        let fixedDistance: Float = 2.0
+        let fixedDistance: Float = 3.0
         let forward = -simd_normalize(simd_make_float3(cameraTransform.columns.2))
         
         let screenCenterTarget = cameraPosition + forward * fixedDistance
-        print("screen center target: \(forward)")
+        print("screen center target: \(cameraPosition)")
         // Use spring to smoothly move to the screen-centered position
         airboardCurrentPosition = criticallyDampedSpringSimple(
             current: airboardCurrentPosition,
@@ -1049,19 +1049,25 @@ public class MaskMetalView: MTKView {
             deltaTime: deltaTime
         )
         
+        let toCamera = cameraPosition - airboardCurrentPosition
+        let toCameraFlat = simd_normalize(simd_float3(toCamera.x, 0, toCamera.z))
         
-        var worldTransform = matrix_identity_float4x4
+        let forward3D = simd_float3(0, 0, 1)
+        let rotationAngle = atan2(toCameraFlat.x, toCameraFlat.z)
         
-        let rotation = simd_float4x4(
-            simd_float4( 0, 1,  0, 0),
-            simd_float4( -1,  0,  0, 0),
-            simd_float4( 0,  0,  1, 0),
-            simd_float4( 0,  0,  0, 1)
+        let cosY = cos(rotationAngle)
+        let sinY = sin(rotationAngle)
+        
+        let lookat = simd_float4x4(
+            simd_float4(cosY,  0, -sinY, 0),
+            simd_float4(0,     1,  0,    0),
+            simd_float4(sinY,  0,  cosY, 0),
+            simd_float4(0,     0,  0,    1)
         )
-
+        
+        var worldTransform = lookat
         worldTransform.columns.3 = simd_float4(airboardCurrentPosition, 1.0)
-//        worldTransform = matrix_multiply(worldTransform, rotation)
-
+        
         self.airboardWorldTransform = worldTransform
     }
 
@@ -1130,7 +1136,7 @@ public class MaskMetalView: MTKView {
             
             // NEW: Switch buffers based on current mode
             switch (imageTrackingStatus, isAirboardMode) {
-            case (.trackingLost, true):  // FIXED: Use trackingLost instead of notRecoganized
+            case (.notRecoganized, true):  // FIXED: Use trackingLost instead of notRecoganized
                 // Use airboard buffers
                 vertexB = airboardExpBuffer.isEmpty ? vertexBuffers : airboardExpBuffer
                 maskBuffer = drawBufferMaskAirboard ?? maskVertexBuffer

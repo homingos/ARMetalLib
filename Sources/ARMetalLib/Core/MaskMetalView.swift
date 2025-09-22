@@ -1006,7 +1006,6 @@ public class MaskMetalView: MTKView {
         self.projectionMatrix = projectionMatrix
         
         
-        print("check this \(isAirboardEnabled)")
         if trackingStatus == .trackingLost && isAirboardEnabled {
             self.isAirboardMode = true
             // Apply smooth airboard positioning similar to video node implementation

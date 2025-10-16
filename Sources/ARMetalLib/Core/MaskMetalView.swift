@@ -164,6 +164,9 @@ public class MaskMetalView: MTKView {
             bufferVertex[i].position += SIMD3(offset.x, offset.y, 0.0)
         }
     }
+    public func getCurrentRenderTransform() -> simd_float4x4? {
+        return self.anchorTransform
+    }
 
     private func createNonStecilPipeline() {
         guard let device = self.device else { return }

@@ -142,6 +142,45 @@ public class MaskMetalView: MTKView {
         createNonStecilPipeline()
         createNonStecilPipelineImage()
     }
+    private func adjustTextureCoordinatesForAspectFill(buffer: MTLBuffer, imageSize: CGSize, targetSize: CGSize) {
+        let bufferPointer = buffer.contents().assumingMemoryBound(to: Vertex.self)
+        
+        let imageAspect = Float(imageSize.width / imageSize.height)
+        let targetAspect = Float(targetSize.width / targetSize.height)
+        
+        var texOffsetX: Float = 0.0
+        var texOffsetY: Float = 0.0
+        var texScaleX: Float = 1.0
+        var texScaleY: Float = 1.0
+        
+        if imageAspect > targetAspect {
+            print("image is wider")
+            // Image is wider - crop left and right
+            texScaleX = targetAspect / imageAspect
+            texOffsetX = (1.0 - texScaleX) / 2.0
+        } else {
+            print("image is taller")
+            // Image is taller - crop top and bottom
+            texScaleY = imageAspect / targetAspect
+            texOffsetY = (1.0 - texScaleY) / 2.0
+        }
+        
+        let originalTexCoords: [SIMD2<Float>] = [
+            SIMD2<Float>(0.0, 0.0), // Bottom-left
+            SIMD2<Float>(1.0, 0.0), // Bottom-right
+            SIMD2<Float>(0.0, 1.0), // Top-left
+            SIMD2<Float>(1.0, 1.0)  // Top-right
+        ]
+        
+        // Adjust texture coordinates to crop
+        for i in 0..<4 {
+            let originalTex = originalTexCoords[i]
+            bufferPointer[i].texCoord = SIMD2<Float>(
+                texOffsetX + originalTex.x * texScaleX,
+                texOffsetY + originalTex.y * texScaleY
+            )
+        }
+    }
     
     private func updateFullScreenImage(targetFullscreenExtent: CGSize){
         
@@ -326,6 +365,17 @@ public class MaskMetalView: MTKView {
         updateVertexBuffer(newExtent: videoExtent)
         updateMaskVertices(maskVertexBuffer, maskTargetSize: maskTargetSize)
         updateOverlayVertices(targetSize: imageTargetExtent)
+        
+        if let overlayLayer = layerImageDic[-1],
+           overlayLayer.image != nil {
+            adjustTextureCoordinatesForAspectFill(
+                buffer: overlayImageBuffer,
+                imageSize: overlayLayer.image!.size,
+                targetSize: imageTargetExtent
+            )
+            print("Adjusted texture coordinates for overlay image in setTargetSize - aspect fill")
+        }
+        
         // calculate the fullscreen Layer coordinates with mask for the scale factor to fit
         updateFullscreenCoordinates()
         updateAirboardCoordinates()

@@ -16,20 +16,22 @@ public class OffscreenRenderer {
     let commandQueue: MTLCommandQueue
     let pipeline: MTLRenderPipelineState
     let sourceTexture: MTLTexture
-    public let outputTexture: MTLTexture
+    let outputTexture: MTLTexture
     
     let vertexBuffer: MTLBuffer
     
-    public init?(image: UIImage, planeNode: SCNNode, sceneView: ARSCNView) {
-        guard let device = MTLCreateSystemDefaultDevice(),
-              let commandQueue = device.makeCommandQueue(),
+    public init?(device: MTLDevice,image: UIImage, planeNode: SCNNode, sceneView: ARSCNView) {
+        
+        self.device = device
+        
+        guard let commandQueue = device.makeCommandQueue(),
               let texture = loadTextureFromImage(image, device: device)
         else {
             print("Metal not available or texture failed.")
             return nil
         }
         
-        self.device = device
+        
         self.commandQueue = commandQueue
         self.sourceTexture = texture
         
@@ -86,7 +88,7 @@ public class OffscreenRenderer {
         self.pipeline = try! device.makeRenderPipelineState(descriptor: pipelineDesc)
         
         guard let vertices = makeVerticesFromPlaneNode(planeNode) else {
-               print("❌ Could not generate vertices from plane node")
+               print("Could not generate vertices from plane node")
                return nil
            }
 

@@ -49,7 +49,7 @@ public class MaskMetalView: MTKView {
     private var maskTexture: MTLTexture?
     private var videoType: VideoType = .normal
     // for video player output dont replace or add new video output use the existing output
-    private var imageTrackingStatus: TrackingStatus = .notRecoganized
+    var imageTrackingStatus: TrackingStatus = .notRecoganized
     
     //MARK: Full screen buffer
     private var fullscreenExpBuffer: [MTLBuffer] = []
@@ -74,11 +74,14 @@ public class MaskMetalView: MTKView {
     private var airboardWorldTransform: simd_float4x4 = matrix_identity_float4x4
     private var lastCameraTransform: simd_float4x4?
     
+    public var offscreenMetalRenderer: OffscreenMetalRenderer?
+    var ViewSize: CGSize
     private let viewAps: Float
     
     public init?(frame: CGRect, device: MTLDevice, maskMode: MaskMode, videoType: VideoType = .normal) {
         print("init MaskMetalView")
         self.viewAps = Float(frame.width / frame.height)
+        self.ViewSize = frame.size
         super.init(frame: frame, device: device)
         self.device = device
         
@@ -94,6 +97,8 @@ public class MaskMetalView: MTKView {
         // true if you want to update the draw call manually using setNeedsDisplay()
         self.enableSetNeedsDisplay = true
         
+        self.offscreenMetalRenderer = OffscreenMetalRenderer(device: device, viewSize: ViewSize)
+        print("video Extent : \(videoExtent)")
         setupMetal()
         setupMaskConfiguration(maskMode: maskMode)
         setupStaticRectangle()
@@ -329,6 +334,15 @@ public class MaskMetalView: MTKView {
         // calculate the fullscreen Layer coordinates with mask for the scale factor to fit
         updateFullscreenCoordinates()
         updateAirboardCoordinates()
+        
+        if imageTrackingStatus == .tracking {
+            offscreenMetalRenderer?.updateVideoExtent(CGSize(width: 0.5, height: 0.5), viewSize: ViewSize)
+        }
+        else{
+            offscreenMetalRenderer?.updateVideoExtent(videoExtent, viewSize: ViewSize)
+        }
+        
+
     }
     
     private func updateFullscreenCoordinates(){
@@ -1201,7 +1215,7 @@ public class MaskMetalView: MTKView {
             updateUniforms(uniformBuffer)
             nonStencilEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
             nonStencilEncoder.setFragmentSamplerState(samplerState, index: 0)
-            print("check: \(airboardWorldTransform)")
+            //print("check: \(airboardWorldTransform)")
             let overlayLayer = layerImageDic[-1]
             let isOverlayImage = overlayLayer?.isOverlayImaage ?? false
             
@@ -1623,6 +1637,8 @@ public class MaskMetalView: MTKView {
             matrices[1] = matrix_identity_float4x4
             matrices[2] = matrix_identity_float4x4
         }
+        
+        offscreenMetalRenderer?.render(mvpMatrix: simd_float4x4(matrices[2] * matrices[1] * matrices[0]))
     }
     
     public func clearLayes(){

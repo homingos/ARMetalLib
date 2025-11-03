@@ -334,15 +334,6 @@ public class MaskMetalView: MTKView {
         // calculate the fullscreen Layer coordinates with mask for the scale factor to fit
         updateFullscreenCoordinates()
         updateAirboardCoordinates()
-        
-        if imageTrackingStatus == .tracking {
-            offscreenMetalRenderer?.updateVideoExtent(CGSize(width: 0.5, height: 0.5), viewSize: ViewSize)
-        }
-        else{
-            offscreenMetalRenderer?.updateVideoExtent(videoExtent, viewSize: ViewSize)
-        }
-        
-
     }
     
     private func updateFullscreenCoordinates(){
@@ -1402,6 +1393,13 @@ public class MaskMetalView: MTKView {
                 case .videov2:
                     break
                 }
+            }
+            
+            if imageTrackingStatus == .tracking {
+                offscreenMetalRenderer?.updateVideoExtent(CGSize(width: 0.5, height: 0.5), viewSize: ViewSize)
+            }
+            else{
+                offscreenMetalRenderer?.updateVideoExtent(videoExtent!, viewSize: ViewSize)
             }
             
             contentEncoder.endEncoding()

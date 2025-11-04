@@ -393,29 +393,44 @@ public class MaskMetalView: MTKView {
         setupExpBufferFullscreen()
         setupMaskBufferFullscreen()
         updateFullScreenImage(targetFullscreenExtent: imageTargetExtent!)
-        // Experience points
-        for (index, layer) in layerImages.enumerated() {
-            let id = layer.id
-            if id == -1 { continue }
-            if index < vertexBuffers.count {
-                let vertexBuffer = fullscreenExpBuffer[index]
-                let bufferPointer = vertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
-                
-                points.append(bufferPointer[0].position)
-                points.append(bufferPointer[1].position)
-                points.append(bufferPointer[2].position)
-                points.append(bufferPointer[3].position)
+        
+        let useMaskForFit: Bool
+        switch maskMode {
+        case .none:
+            useMaskForFit = false
+        case .Image, .VideoPlayer:
+            useMaskForFit = (maskVertexBuffer != nil)
+        }
+        if useMaskForFit {
+            // Use MASK vertices for calculating fit
+            print(" Using MASK vertices for fit calculation")
+            if let drawBufferMaskFullscreen = drawBufferMaskFullscreen {
+                let maskBuffer = drawBufferMaskFullscreen.contents().assumingMemoryBound(to: Vertex.self)
+                points.append(maskBuffer[0].position)
+                points.append(maskBuffer[1].position)
+                points.append(maskBuffer[2].position)
+                points.append(maskBuffer[3].position)
             }
         }
+//        else {
+//            // Use EXPERIENCE vertices for calculating fit (original behavior)
+//            print("🎬 Using EXPERIENCE vertices for fit calculation")
+//            for (index, layer) in layerImages.enumerated() {
+//                let id = layer.id
+//                if id == -1 { continue }
+//                if index < vertexBuffers.count {
+//                    let vertexBuffer = fullscreenExpBuffer[index]
+//                    let bufferPointer = vertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
+//                    
+//                    points.append(bufferPointer[0].position)
+//                    points.append(bufferPointer[1].position)
+//                    points.append(bufferPointer[2].position)
+//                    points.append(bufferPointer[3].position)
+//                }
+//            }
+//        }
         
-        // TODO: Target image to the points
-//        let maksBuffer = drawBufferMaskFullscreen?.contents().assumingMemoryBound(to: Vertex.self)
-//        points.append(maksBuffer![0].position)
-//        points.append(maksBuffer![1].position)
-//        points.append(maksBuffer![2].position)
-//        points.append(maksBuffer![3].position)
-        
-        // Adding ovlerlay image
+        // Adding overlay image (always include this)
         if let nonStencilImageBuffer {
             let overlayBuffer = nonStencilImageBuffer.contents().assumingMemoryBound(to: Vertex.self)
             points.append(overlayBuffer[0].position)

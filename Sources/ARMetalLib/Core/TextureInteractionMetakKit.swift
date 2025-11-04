@@ -11,6 +11,7 @@ import simd
 import SceneKit
 import ARKit
 
+@MainActor
 public class OffscreenMetalRenderer {
     let device: MTLDevice
     let commandQueue: MTLCommandQueue

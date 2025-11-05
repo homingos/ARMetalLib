@@ -411,24 +411,23 @@ public class MaskMetalView: MTKView {
                 points.append(maskBuffer[2].position)
                 points.append(maskBuffer[3].position)
             }
+        } else {
+            // Use EXPERIENCE vertices for calculating fit (original behavior)
+            print("sss: Using EXPERIENCE vertices for fit calculation")
+            for (index, layer) in layerImages.enumerated() {
+                let id = layer.id
+                if id == -1 { continue }
+                if index < vertexBuffers.count {
+                    let vertexBuffer = fullscreenExpBuffer[index]
+                    let bufferPointer = vertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
+                    
+                    points.append(bufferPointer[0].position)
+                    points.append(bufferPointer[1].position)
+                    points.append(bufferPointer[2].position)
+                    points.append(bufferPointer[3].position)
+                }
+            }
         }
-//        else {
-//            // Use EXPERIENCE vertices for calculating fit (original behavior)
-//            print("🎬 Using EXPERIENCE vertices for fit calculation")
-//            for (index, layer) in layerImages.enumerated() {
-//                let id = layer.id
-//                if id == -1 { continue }
-//                if index < vertexBuffers.count {
-//                    let vertexBuffer = fullscreenExpBuffer[index]
-//                    let bufferPointer = vertexBuffer.contents().assumingMemoryBound(to: Vertex.self)
-//                    
-//                    points.append(bufferPointer[0].position)
-//                    points.append(bufferPointer[1].position)
-//                    points.append(bufferPointer[2].position)
-//                    points.append(bufferPointer[3].position)
-//                }
-//            }
-//        }
         
         // Adding overlay image (always include this)
         if let nonStencilImageBuffer {

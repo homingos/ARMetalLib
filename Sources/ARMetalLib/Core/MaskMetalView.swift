@@ -1460,10 +1460,11 @@ public class MaskMetalView: MTKView {
             }
             
             if imageTrackingStatus == .tracking {
-                offscreenMetalRenderer?.updateVideoExtent(CGSize(width: 0.5, height: 0.5), viewSize: ViewSize)
+                let viewAspect = (ViewSize.width / ViewSize.height)
+                offscreenMetalRenderer?.updateVideoExtent(CGSize(width: 1.0, height: 1.0 * viewAspect))
             }
             else{
-                offscreenMetalRenderer?.updateVideoExtent(videoExtent!, viewSize: ViewSize)
+                offscreenMetalRenderer?.updateVideoExtent(videoExtent!)
             }
             
             contentEncoder.endEncoding()

@@ -84,17 +84,16 @@ public class OffscreenMetalRenderer {
         
         // --- Default 1:1 vertices (will update when videoExtent is known) ---
         let initialExtent = videoExtent ?? CGSize(width: 1.0, height: 1.0)
-        setupVertices(for: initialExtent, viewSize: viewSize)
+        setupVertices(for: initialExtent)
 
     }
 
     // MARK: - Vertex Setup
-    private func setupVertices(for videoExtent: CGSize, viewSize: CGSize) {
-        let viewAspect = (viewSize.width / viewSize.height)
+    private func setupVertices(for videoExtent: CGSize) {
     
         // make it w.r.t to video
-        var w: Float = Float(videoExtent.width)
-        var h: Float = Float(videoExtent.height) * Float(viewAspect)
+        var w: Float = Float(videoExtent.width/2)
+        var h: Float = Float(videoExtent.height/2) 
         
         let vertices = [
             Vertex(position: [-w, -h, 0], texCoord: [0, 1], textureIndex: 0),
@@ -113,8 +112,8 @@ public class OffscreenMetalRenderer {
     }
 
     // MARK: - Update video extent later
-    public func updateVideoExtent(_ extent: CGSize, viewSize: CGSize) {
-        setupVertices(for: extent, viewSize: viewSize)
+    public func updateVideoExtent(_ extent: CGSize) {
+        setupVertices(for: extent)
         print("Updated OffscreenMetalRenderer vertices with new video extent: \(extent)")
     }
 

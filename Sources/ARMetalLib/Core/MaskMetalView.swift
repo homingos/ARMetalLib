@@ -1413,31 +1413,53 @@ public class MaskMetalView: MTKView {
                     
                 case .video(let playerItemVideoOutput, let avplayer, let videoType):
                     let time = avplayer.currentTime()
+                    
                     if let videoOutput = playerItemVideoOutput,
-                       let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil),
                        let textureCache = currentLayer.textureCache {
                         
-                        var cvTexture: CVMetalTexture?
-                        let width = CVPixelBufferGetWidth(pixelBuffer)
-                        let height = CVPixelBufferGetHeight(pixelBuffer)
-                        CVMetalTextureCacheCreateTextureFromImage(
-                            nil,
-                            textureCache,
-                            pixelBuffer,
-                            nil,
-                            .bgra8Unorm,
-                            width,
-                            height,
-                            0,
-                            &cvTexture
-                        )
+                        var metalTexture: MTLTexture? = nil
                         
-                        if let texture = cvTexture,
-                           let metalTexture = CVMetalTextureGetTexture(texture) {
-                            // CHANGE: Use the pre-selected vertexB instead of hardcoded buffer selection
+                        // Try to get a fresh frame from the video output
+                        if let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) {
+                            var cvTexture: CVMetalTexture?
+                            let width = CVPixelBufferGetWidth(pixelBuffer)
+                            let height = CVPixelBufferGetHeight(pixelBuffer)
+                            
+                            let status = CVMetalTextureCacheCreateTextureFromImage(
+                                nil,
+                                textureCache,
+                                pixelBuffer,
+                                nil,
+                                .bgra8Unorm,
+                                width,
+                                height,
+                                0,
+                                &cvTexture
+                            )
+                            
+                            if status == kCVReturnSuccess,
+                               let cvTexture = cvTexture,
+                               let newTexture = CVMetalTextureGetTexture(cvTexture) {
+                                metalTexture = newTexture
+                                // Cache the latest valid texture
+                                currentLayer.lastVideoTexture = newTexture
+                            } else {
+                                print("Failed to create Metal texture from pixel buffer")
+                            }
+                        } else {
+                            // No new pixel buffer — reuse last valid frame
+                            if let cached = currentLayer.lastVideoTexture {
+                                metalTexture = cached
+                                print("Using cached last video texture (no new frame)")
+                            } else {
+                                print("No valid pixelBuffer or cached texture available")
+                            }
+                        }
+                        
+                        // Render if we have a valid texture
+                        if let metalTexture {
                             contentEncoder.setVertexBuffer(vertexB[i], offset: 0, index: 0)
                             contentEncoder.setFragmentTexture(metalTexture, index: i)
-                            
                             contentEncoder.drawIndexedPrimitives(
                                 type: .triangle,
                                 indexCount: 6,
@@ -1445,11 +1467,9 @@ public class MaskMetalView: MTKView {
                                 indexBuffer: indexBuffers[i],
                                 indexBufferOffset: 0
                             )
-                        } else {
-                            print("Failed to get metal texture from CVMetalTexture")
                         }
                     } else {
-                        print("Video output components not valid")
+                        print("Video output or texture cache not valid")
                     }
                     
                 case .model(_):

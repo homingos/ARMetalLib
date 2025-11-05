@@ -30,6 +30,7 @@ public final class MaskLayer: @unchecked Sendable {
     var videoType: VideoType = .normal
     var useStencil: Bool = false
     var isOverlayImaage: Bool = false
+    var lastVideoTexture: MTLTexture?
     
     // Computed property to access the type
     var type: ParallaxType {

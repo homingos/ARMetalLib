@@ -1337,39 +1337,67 @@ public class MaskMetalView: MTKView {
                     
                 case .video(let playerItemVideoOutput, let avplayer, _):
                     let time = avplayer.currentTime()
+
                     guard let videoOutput = playerItemVideoOutput,
-                          let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil),
                           let textureCache = currentLayer.textureCache else { continue }
-                    
-                    var cvTexture: CVMetalTexture?
-                    let width = CVPixelBufferGetWidth(pixelBuffer)
-                    let height = CVPixelBufferGetHeight(pixelBuffer)
-                    CVMetalTextureCacheCreateTextureFromImage(
-                        nil,
-                        textureCache,
-                        pixelBuffer,
-                        nil,
-                        .bgra8Unorm,
-                        width,
-                        height,
-                        0,
-                        &cvTexture
-                    )
-                    
-                    guard let texture = cvTexture,
-                          let metalTexture = CVMetalTextureGetTexture(texture) else { continue }
-                    
-                    // CHANGE: Use the pre-selected vertexB instead of hardcoded logic
-                    nonStencilEncoderExp.setVertexBuffer(vertexB[i], offset: 0, index: 0)
-                    nonStencilEncoderExp.setFragmentTexture(metalTexture, index: i)
-                    nonStencilEncoderExp.drawIndexedPrimitives(
-                        type: .triangle,
-                        indexCount: 6,
-                        indexType: .uint16,
-                        indexBuffer: indexBuffers[i],
-                        indexBufferOffset: 0
-                    )
-                    
+
+                    var metalTexture: MTLTexture? = nil
+
+                    // Try to grab a fresh pixelBuffer
+                    if let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) {
+
+                        var cvTexture: CVMetalTexture?
+                        let width = CVPixelBufferGetWidth(pixelBuffer)
+                        let height = CVPixelBufferGetHeight(pixelBuffer)
+
+                        let status = CVMetalTextureCacheCreateTextureFromImage(
+                            nil,
+                            textureCache,
+                            pixelBuffer,
+                            nil,
+                            .bgra8Unorm,
+                            width,
+                            height,
+                            0,
+                            &cvTexture
+                        )
+
+                        if status == kCVReturnSuccess,
+                           let cvTexture = cvTexture,
+                           let newTexture = CVMetalTextureGetTexture(cvTexture) {
+
+                            metalTexture = newTexture
+
+                            // cache the last valid texture
+                            currentLayer.lastVideoTexture = newTexture
+
+                        } else {
+                            print("Failed to create Metal texture")
+                        }
+
+                    } else {
+                        // pixelBuffer was nil → fallback
+                        if let cached = currentLayer.lastVideoTexture {
+                            metalTexture = cached
+                            // print("Using cached last video texture")
+                        } else {
+                            print("No pixelBuffer and no cached texture available")
+                        }
+                    }
+
+                    // Only render when we have a texture
+                    if let metalTexture {
+
+                        nonStencilEncoderExp.setVertexBuffer(vertexB[i], offset: 0, index: 0)
+                        nonStencilEncoderExp.setFragmentTexture(metalTexture, index: i)
+                        nonStencilEncoderExp.drawIndexedPrimitives(
+                            type: .triangle,
+                            indexCount: 6,
+                            indexType: .uint16,
+                            indexBuffer: indexBuffers[i],
+                            indexBufferOffset: 0
+                        )
+                    }
                 case .model(_):
                     break
                 case .videov2:

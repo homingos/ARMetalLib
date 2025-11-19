@@ -481,7 +481,7 @@ public class MaskMetalView: MTKView {
             points.append(airboardBuffer[3].position)
         }
 
-        var value = scaleFactorTofit(points: points, bound: CGSize(width: 0.8, height: 0.6))
+        var value = scaleFactorTofit(points: points, bound: CGSize(width: 0.9, height: 0.95))
         print("airboard scale: \(value) \(value.scale * 0.8)")
         
         // Apply scaling to keep content properly sized and centered
@@ -1120,24 +1120,21 @@ public class MaskMetalView: MTKView {
             deltaTime: deltaTime
         )
         
-        let toCamera = cameraPosition - airboardCurrentPosition
-        let toCameraFlat = simd_normalize(simd_float3(toCamera.x, 0, toCamera.z))
+        let toCameraDirection = simd_normalize(cameraPosition - airboardCurrentPosition)
         
-        let forward3D = simd_float3(0, 0, 1)
-        let rotationAngle = atan2(toCameraFlat.x, toCameraFlat.z)
         
-        let cosY = cos(rotationAngle)
-        let sinY = sin(rotationAngle)
+        let upVector = simd_float3(0, 1, 0)
+        let zAxis = toCameraDirection
+        let xAxis = simd_normalize(simd_cross(upVector, zAxis))
+        let yAxis = simd_normalize(simd_cross(zAxis, xAxis))
         
-        let lookat = simd_float4x4(
-            simd_float4(cosY,  0, -sinY, 0),
-            simd_float4(0,     1,  0,    0),
-            simd_float4(sinY,  0,  cosY, 0),
-            simd_float4(0,     0,  0,    1)
+        // Build rotation matrix (columns are the axes)
+        var worldTransform = simd_float4x4(
+            simd_float4(xAxis, 0),
+            simd_float4(yAxis, 0),
+            simd_float4(zAxis, 0),
+            simd_float4(airboardCurrentPosition, 1)
         )
-        
-        var worldTransform = lookat
-        worldTransform.columns.3 = simd_float4(airboardCurrentPosition, 1.0)
         
         self.airboardWorldTransform = worldTransform
     }

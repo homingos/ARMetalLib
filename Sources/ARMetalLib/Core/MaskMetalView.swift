@@ -481,13 +481,13 @@ public class MaskMetalView: MTKView {
             points.append(airboardBuffer[3].position)
         }
 
-        var value = scaleFactorTofit(points: points, bound: CGSize(width: 0.6, height: 0.5))
-        print("airboard scale: \(value)")
+        var value = scaleFactorTofit(points: points, bound: CGSize(width: 0.8, height: 0.6))
+        print("airboard scale: \(value) \(value.scale * 0.8)")
         
         // Apply scaling to keep content properly sized and centered
-        preparemaskBufferAirboard(scale: value.scale * 0.8 * (playbackScale ?? 1.0), offset: value.offset)
-        prepareExpBufferAirboard(scale: value.scale * 0.8 * (playbackScale ?? 1.0), offset: value.offset)
-        prepareAirboardImage(scale: value.scale * 0.8 * (playbackScale ?? 1.0), offset: value.offset)
+        preparemaskBufferAirboard(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)
+        prepareExpBufferAirboard(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)
+        prepareAirboardImage(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)
     }
     private func setupMaskBufferAirboard() {
         guard let device, let maskVertexBuffer else { return }
@@ -1207,7 +1207,7 @@ public class MaskMetalView: MTKView {
             
             // NEW: Switch buffers based on current mode
             switch (imageTrackingStatus, isAirboardMode) {
-            case (.notRecoganized, true):  // FIXED: Use trackingLost instead of notRecoganized
+            case (.trackingLost, true):  // FIXED: Use trackingLost instead of notRecoganized
                 // Use airboard buffers
                 vertexB = airboardExpBuffer.isEmpty ? vertexBuffers : airboardExpBuffer
                 maskBuffer = drawBufferMaskAirboard ?? maskVertexBuffer

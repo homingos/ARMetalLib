@@ -480,14 +480,26 @@ public class MaskMetalView: MTKView {
             points.append(airboardBuffer[2].position)
             points.append(airboardBuffer[3].position)
         }
-
-        var value = scaleFactorTofit(points: points, bound: CGSize(width: 0.9, height: 0.95))
-        print("airboard scale: \(value) \(value.scale * 0.8)")
         
-        // Apply scaling to keep content properly sized and centered
-        preparemaskBufferAirboard(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)
-        prepareExpBufferAirboard(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)
-        prepareAirboardImage(scale: value.scale * (playbackScale ?? 1.0), offset: value.offset)
+        var value = scaleFactorTofit(points: points, bound: CGSize(width: 0.9, height: 0.95))
+        
+        
+        let finalOffset: SIMD2<Float>
+        let planeScale: Float
+        switch maskMode {
+        case .none:
+            finalOffset = value.offset
+            planeScale = value.scale * (playbackScale ?? 1.0)
+        case .Image, .VideoPlayer:
+            finalOffset = SIMD2<Float>(0, 0)
+            planeScale = 1.0
+        }
+        print("airboard scale: \(value) \(value.scale * 0.8) + plane scale \(planeScale)")
+        
+        // Apply scaling to airboard buffers
+        preparemaskBufferAirboard(scale: planeScale, offset: finalOffset)
+        prepareExpBufferAirboard(scale: planeScale, offset: finalOffset)
+        prepareAirboardImage(scale: planeScale, offset: finalOffset)
     }
     private func setupMaskBufferAirboard() {
         guard let device, let maskVertexBuffer else { return }
